@@ -7,7 +7,16 @@ module.exports = merge(common, {
   devServer: {
     liveReload: true,
     hot: true,
-    open: true,
-    static: ['./'],
+    open: false,
+    host: '127.0.0.1',
+    port: 3000,
+    static: false,
+    proxy: [
+      {
+        context: ['/api'],
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
+    ],
   },
 });

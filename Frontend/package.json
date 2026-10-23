@@ -1,7 +1,7 @@
 {
   "name": "Fado",
   "version": "0.0.1",
-  "description": "",
+  "description": "FaDO React frontend — OLED preview and pixel expression editor",
   "private": true,
   "keywords": [
     ""
@@ -9,16 +9,25 @@
   "license": "",
   "author": "",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "webpack serve --open --config webpack.config.dev.js",
+    "test": "tsx --test tests/*.test.mjs tests/*.test.jsx",
+    "start": "webpack serve --config webpack.config.dev.js",
     "build": "webpack --config webpack.config.prod.js"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "babel-loader": "^10.1.1",
     "copy-webpack-plugin": "^11.0.0",
     "html-webpack-plugin": "^5.6.0",
+    "jsdom": "^30.1.3",
+    "tsx": "^4.23.15",
     "webpack": "^5.91.0",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.0.4",
     "webpack-merge": "^5.10.0"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }
