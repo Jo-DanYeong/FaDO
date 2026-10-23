@@ -12,7 +12,7 @@ def health():
 @app.post("/expression")
 def expression(request: ExpressionRequest):
     print(f"받은 id : {request.expressionId}")
-    if request == "happy":
+    if request.expressionId == "happy":
         ImgTest.show_image()
         return {
             "message": "테스트 이미지 출력 완료",
