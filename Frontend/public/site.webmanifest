@@ -1,0 +1,16 @@
+{
+  "short_name": "FaDO",
+  "name": "FaDO — 마음을 전하는 작은 표정",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/#studio",
+  "display": "standalone",
+  "background_color": "#f7f9f7",
+  "theme_color": "#557e61",
+  "lang": "ko"
+}

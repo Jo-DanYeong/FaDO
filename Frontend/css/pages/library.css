@@ -1,0 +1,35 @@
+.library-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 33px 0 23px; gap: 20px; }
+.filter-tabs { display: flex; gap: 5px; border-bottom: 1px solid var(--line); align-self: stretch; }
+.filter-tabs button { background: transparent; padding: 12px 17px 15px; font-size: 12px; color: #93a184; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.filter-tabs button.active { color: var(--green); border-color: #789768; font-weight: 600; }
+.filter-tabs span { font-size: 10px; margin-left: 5px; color: #96a78a; }
+.search-field { display: flex; align-items: center; gap: 8px; border: 1px solid #e4eadf; padding: 11px 13px; border-radius: 8px; background: white; color: #9fa991; }
+.search-field .icon { width: 16px; height: 16px; }
+.search-field input { border: 0; outline: none; width: 145px; background: transparent; font-size: 11px; color: var(--ink); }
+.search-field input::placeholder { color: #a6b298; }
+.search-field:focus-within { outline: 2px solid #8ca47e; outline-offset: 2px; }
+.library-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
+.library-grid .expression-select { padding: 17px; height: auto; }
+.library-grid .expression-art { aspect-ratio: 2.1; }
+.library-grid .expression-art canvas { width: 75%; height: 75%; object-fit: contain; }
+.library-grid .expression-info { flex-direction: row; align-items: center; gap: 8px; margin: 18px 0 0; }
+.library-grid .expression-info strong { font-size: 14px; }
+.library-grid .expression-info>span { font-size: 10px; }
+.expression-note { display: block; font-size: 11px; color: #98a78c; margin-top: 8px; }
+.expression-actions { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #f0f2eb; margin: 0 17px; padding: 10px 0; }
+.expression-actions>div { display: flex; gap: 3px; }
+.preset-tag { font-size: 9px; color: #93a385; background: #f5f7f0; padding: 4px 7px; border-radius: 4px; }
+.expression-actions .icon-button .icon { width: 15px; height: 15px; }
+.danger:hover { color: #b16c62; background: #fcf0ed; }
+.new-expression-card { min-height: 230px; border: 1px dashed #ccd8c0; background: #f3f6ed; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-direction: column; color: #8da479; gap: 10px; }
+.new-expression-card:hover { background: #edf3e5; }
+.new-expression-card>span { width: 43px; height: 43px; display: grid; place-items: center; border: 1px solid #dae4d0; background: #fafcf7; border-radius: 50%; margin-bottom: 5px; }
+.new-expression-card strong { font-size: 13px; font-weight: 550; }
+.new-expression-card p { font-size: 11px; color: #9daf8c; }
+.library-tip { display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; color: #95a686; margin-top: 25px; line-height: 1.8; }
+.library-tip .icon { width: 14px; height: 14px; }
+.empty-state { grid-column: 1/-1; background: white; border: 1px solid var(--line); border-radius: 15px; padding: 70px 20px; text-align: center; }
+.empty-state>span { color: #94a781; display: grid; place-items: center; margin-bottom: 15px; }
+.empty-state>span .icon { width: 34px; height: 34px; }
+.empty-state h2 { font-size: 18px; font-weight: 550; }
+.empty-state p { color: #94a481; font-size: 12px; margin: 13px 0 25px; }
