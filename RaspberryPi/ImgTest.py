@@ -20,7 +20,7 @@ oled.fill(0)
 oled.show()
 
 try:
-    image_path = "ImgTest.jpg"
+    image_path = "hachiware.jpeg"
 
     # 3. 이미지 원본 불러오기
     raw_image = Image.open(image_path)
