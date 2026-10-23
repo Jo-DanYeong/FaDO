@@ -1,4 +1,4 @@
-package backend.server.API.Yolo;
+package backend.server.RaspberryPi.DTO;
 
 import java.util.List;
 

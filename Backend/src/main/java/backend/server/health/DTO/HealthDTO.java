@@ -1,4 +1,4 @@
-package backend.server.health;
+package backend.server.health.DTO;
 
 import java.time.Instant;
 

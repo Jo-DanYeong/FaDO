@@ -1,5 +1,7 @@
-package backend.server.API.Yolo;
+package backend.server.RaspberryPi.API;
 
+import backend.server.RaspberryPi.DTO.DetectionResponse;
+import backend.server.RaspberryPi.RaspberryClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,10 +19,10 @@ import java.util.Set;
 public class DetectionController {
     private static final long MAX_SIZE_BYTES = 10L * 1024 * 1024;
     private static final Set<String> ALLOWED_TYPES = Set.of("image/jpeg", "image/png");
-    private final YoloClient yoloClient;
+    private final RaspberryClient raspberryClient;
 
-    public DetectionController(YoloClient yoloClient) {
-        this.yoloClient = yoloClient;
+    public DetectionController(RaspberryClient raspberryClient) {
+        this.raspberryClient = raspberryClient;
     }
 
     @PostMapping(value = "/detect", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -34,6 +36,6 @@ public class DetectionController {
         if (!ALLOWED_TYPES.contains(file.getContentType())) {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "JPG와 PNG만 지원합니다.");
         }
-        return yoloClient.predict(file.getBytes(), MediaType.parseMediaType(file.getContentType()));
+        return raspberryClient.predict(file.getBytes(), MediaType.parseMediaType(file.getContentType()));
     }
 }

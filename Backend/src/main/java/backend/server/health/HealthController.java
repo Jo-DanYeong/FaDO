@@ -1,13 +1,11 @@
 package backend.server.health;
 
-import org.springframework.http.ResponseEntity;
+import backend.server.health.DTO.HealthDTO;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.Serializable;
 import java.time.Instant;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/health")
