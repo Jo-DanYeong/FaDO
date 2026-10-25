@@ -17,7 +17,10 @@ export function makeBitmap(expression) {
       ctx.fillRect(24,36,9,3); ctx.fillRect(95,36,9,3); break;
     case 'neutral': eye(34); eye(88); line([[53,44],[75,44]]); break;
     case 'sad':
-      line([[30,24],[43,19]]); line([[85,19],[98,24]]); eye(35,29,5,7); eye(88,29,5,7);
+      line([[30,24],[43,19]]);
+      line([[85,19],[98,24]]);
+      eye(35,29,5,7);
+      eye(88,29,5,7);
       line([[52,49],[52,45],[57,45],[57,42],[71,42],[71,45],[76,45],[76,49]]);
       ctx.fillRect(98,33,3,9); ctx.fillRect(96,39,7,5); break;
     case 'angry':

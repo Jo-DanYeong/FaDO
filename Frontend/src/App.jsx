@@ -18,6 +18,7 @@ export function App() {
   const [editor, setEditor] = useState(null);
   const nextEditorId = useRef(0);
   const actions = useExpressionActions(expression => setEditor({ expression, id: ++nextEditorId.current }));
+  const { select } = actions;
   const Page = pages[page];
   useDemo(state.playing && page === 'studio', dispatch);
 
@@ -33,11 +34,11 @@ export function App() {
       const typing = /INPUT|TEXTAREA|SELECT/.test(focused?.tagName) || focused?.isContentEditable;
       if (page !== 'studio' || editor || typing || event.ctrlKey || event.metaKey || event.altKey) return;
       const expression = state.builtins.find(item => item.key === event.key);
-      if (expression) { event.preventDefault(); dispatch({ type: 'select', id: expression.id }); }
+      if (expression) { event.preventDefault(); select(expression.id); }
     };
     document.addEventListener('keydown', selectShortcut);
     return () => document.removeEventListener('keydown', selectShortcut);
-  }, [page, editor, state.builtins, dispatch]);
+  }, [page, editor, state.builtins, select]);
 
   return (
     <>

@@ -12,6 +12,8 @@ npm start
 
 프론트엔드 확인용 개발 서버: `http://127.0.0.1:3000/#studio`
 
+표정 선택은 Java 백엔드의 `POST /api/v1/expression`에 `{ "expressionId": "happy" }` 형식으로 요청합니다. 개발 서버의 `/api` 프록시 대상은 `http://127.0.0.1:8080`이며 `webpack.config.dev.js`에서 변경할 수 있습니다. 운영에서는 같은 사이트 주소에서 `/api`를 Java 백엔드로 연결해야 합니다.
+
 ```powershell
 npm test
 npm run build
@@ -61,12 +63,15 @@ src/
       ExpressionEditor.jsx         # 제어형 dialog, 마우스·터치·키보드 이벤트
       model.js                     # React·DOM에 의존하지 않는 픽셀 편집 모델
   services/
+    api.js                         # Java 백엔드에 표정 선택 요청
     storage.js                     # 기존 localStorage 형식과 호환되는 저장 계층
     camera.js                      # 권한 요청, 지연 응답 취소, 스트림 종료
     demo.js                        # 중복 타이머 방지
     export.js                      # PNG·JSON 생성과 다운로드
   data/presets.js                   # 기본 표정 이름·색상·단축키
-  utils/bitmap.js                   # 기본 비트맵 생성과 캔버스 렌더링
+  utils/
+    bitmap.js                      # 기본 비트맵 생성과 캔버스 렌더링
+    id.js                          # HTTP 환경에서도 생성 가능한 사용자 표정 ID
 css/
   style.css                        # 스타일 진입점
   base.css, layout.css              # 공통 색상·글꼴·레이아웃
@@ -78,6 +83,7 @@ tests/
   workspace.test.mjs                # reducer·검색·라우트·저장·내보내기 검증
   editor-model.test.mjs             # 그리기·지우기·되돌리기 검증
   services.test.mjs                 # 타이머·카메라 요청 취소 검증
+  id.test.mjs                       # UUID 및 대체 ID 생성 검증
 dist/                              # 빌드 결과: 직접 수정하지 않음
 ```
 
@@ -99,24 +105,29 @@ dist/                              # 빌드 결과: 직접 수정하지 않음
 
 스튜디오에서는 숫자 `1`~`6`으로 표정을 선택합니다. 편집기 캔버스에서는 방향키로 이동하고 Space로 그립니다. Esc로 편집기를 닫습니다.
 
+버튼과 숫자 단축키는 같은 표정 선택 함수를 사용합니다. 연속 선택 요청은 순서대로 전송하고, 각 요청이 성공하면 화면과 마지막 선택을 갱신합니다. 실패하면 기존 선택을 유지하고 다음 요청을 처리합니다. 앱을 종료하면 아직 전송하지 않은 대기 요청을 버립니다.
+
+새 표정 ID는 `crypto.randomUUID()`를 우선 사용하고, 사용할 수 없는 HTTP 환경에서는 `getRandomValues()`로 생성합니다. Web Crypto 전체가 없는 환경에서도 로컬 식별자를 생성할 수 있습니다.
+
 ## 백엔드 연동 지점
 
-- HTTP·WebSocket 통신 모듈은 `src/services/`에 추가하고, 백엔드에서 정한 주소·요청 형식·오류 처리를 여기에 둡니다.
-- 수동 표정 선택을 기기로 보내려면 `src/features/useExpressionActions.js`의 `select()`에서 통신 모듈을 호출합니다.
+- 표정 선택 API 경로와 요청 형식은 `src/services/api.js`에 정의되어 있습니다. 추가 HTTP·WebSocket 통신 모듈도 `src/services/`에 둡니다.
+- `src/features/useExpressionActions.js`의 `select()`가 API 요청 순서와 성공·실패 처리를 관리합니다.
 - 서버의 인식 결과를 화면에 반영하려면 `src/core/workspace.js`에 해당 reducer 액션을 추가하고, React 훅에서 `useWorkspace()`의 `dispatch()`로 전달합니다.
 - 서버 저장으로 전환할 때는 `src/services/storage.js`와 `src/context/WorkspaceContext.jsx`의 저장 effect를 조정합니다.
 - Raspberry Pi 영상으로 전환할 때는 `useCamera.js`와 설정 화면의 영상 컴포넌트를 실제 스트림 규격에 맞게 연결합니다.
 
-현재 표정 인식 수치는 **데모 예시**입니다. 머신러닝, Raspberry Pi 통신, 실제 OLED 전송은 구현하지 않았으며 API 엔드포인트를 임의로 정하지 않았습니다. 설정의 서버 주소도 저장만 합니다. 로컬 카메라 영상은 전송·저장하지 않습니다.
+현재 표정 인식 수치는 **데모 예시**입니다. 프론트는 표정 ID를 Java API에 전달하며 Raspberry Pi 통신과 실제 OLED 출력은 백엔드에서 처리합니다. 사용자 표정의 픽셀 데이터는 브라우저에 저장되므로 기기에서 사용할 데이터 업로드·동기화는 별도로 연결해야 합니다. 설정의 서버 주소는 저장만 하며 실제 개발 API 연결 주소는 프록시 설정으로 지정합니다. 로컬 카메라 영상은 전송·저장하지 않습니다.
 
 내보내는 JSON은 `version`, `name`, `width`, `height`, `format`, `pixels`를 포함합니다. `pixels`는 왼쪽 위부터 행 단위로 나열된 8,192개의 `0`/`1` 배열(`row-major-binary`)입니다. SSD1306 페이지 단위 바이트 변환과 I²C 전송은 백엔드에서 처리합니다.
 
 ## 테스트
 
-`npm test`는 Node 테스트 러너·tsx·jsdom으로 20개 테스트를 실행합니다. React 테스트는 `StrictMode`에서 실제 컴포넌트를 마운트해 표정 선택, 키보드 단축키, 편집·되돌리기·저장·검색, 설정 폼 유지, 타이머 정리, 지연된 카메라 응답 정리를 검증합니다. 테스트의 카메라는 가짜 스트림이며 실제 권한을 요청하지 않습니다.
+`npm test`는 Node 테스트 러너·tsx·jsdom으로 27개 테스트를 실행합니다. React 테스트는 `StrictMode`에서 실제 컴포넌트를 마운트해 버튼·단축키의 API 요청, 연속 선택의 전송 순서, 네트워크·HTTP 오류 처리, 종료 후 대기 요청 정리, 편집·되돌리기·저장·검색, UUID API가 없는 환경의 저장, 설정 폼 유지, 타이머와 카메라 정리를 검증합니다. API는 모의 응답을 사용하고 카메라는 가짜 스트림을 사용하므로 테스트를 위해 실제 서버나 카메라 권한이 필요하지 않습니다.
 
 ## 참고
 
 - [React: 기존 프로젝트에 React 추가](https://react.dev/learn/add-react-to-an-existing-project)
 - [React: effect 수명과 정리](https://react.dev/reference/react/useEffect)
 - [Babel: JSX 자동 런타임](https://babeljs.io/docs/babel-preset-react)
+- [MDN: HTTP 환경에서도 사용할 수 있는 getRandomValues](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues)

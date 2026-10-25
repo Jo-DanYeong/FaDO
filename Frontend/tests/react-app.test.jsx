@@ -1,5 +1,5 @@
 import React, { StrictMode, act } from 'react';
-import test, { afterEach } from 'node:test';
+import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
@@ -26,6 +26,16 @@ const { defaultSettings } = await import('../src/services/storage.js');
 const { presets } = await import('../src/data/presets.js');
 const builtins = presets.map(item => ({ ...item, bitmap: Array(8192).fill(0) }));
 let root;
+const originalFetch = globalThis.fetch;
+let requests;
+
+beforeEach(() => {
+  requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return new Response(null, { status: 204 });
+  };
+});
 
 async function mount(page = 'studio') {
   localStorage.clear();
@@ -37,8 +47,12 @@ async function mount(page = 'studio') {
 }
 
 afterEach(async () => {
-  if (root) { await act(async () => root.unmount()); root = undefined; }
-  document.body.replaceChildren();
+  try {
+    if (root) { await act(async () => root.unmount()); root = undefined; }
+    document.body.replaceChildren();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 function button(name) {
@@ -62,7 +76,7 @@ async function navigate(page) {
   });
 }
 
-test('React selection and shortcuts update the preview and saved workspace', async () => {
+test('buttons and numeric shortcuts send the same API request before updating the workspace', async () => {
   await mount();
   await click(button('슬퍼요 표정 선택'));
   assert.equal(button('슬퍼요 표정 선택').getAttribute('aria-pressed'), 'true');
@@ -70,6 +84,63 @@ test('React selection and shortcuts update the preview and saved workspace', asy
   await act(async () => document.dispatchEvent(new window.KeyboardEvent('keydown', { key: '6', bubbles: true })));
   assert.equal(button('좋아해요 표정 선택').getAttribute('aria-pressed'), 'true');
   assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'love');
+  assert.deepEqual(requests.map(request => JSON.parse(request.body)), [{ expressionId: 'sad' }, { expressionId: 'love' }]);
+  for (const request of requests) {
+    assert.equal(request.url, '/api/v1/expression');
+    assert.equal(request.method, 'POST');
+    assert.equal(request.headers['Content-Type'], 'application/json');
+  }
+});
+
+test('rapid selections are sent in order and the last selection stays selected', async () => {
+  const pending = [];
+  globalThis.fetch = (url, options) => new Promise(resolve => {
+    pending.push({ id: JSON.parse(options.body).expressionId, resolve });
+  });
+  await mount();
+  await click(button('슬퍼요 표정 선택'));
+  await click(button('화났어요 표정 선택'));
+  assert.deepEqual(pending.map(request => request.id), ['sad']);
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'happy');
+
+  await act(async () => pending[0].resolve(new Response(null, { status: 204 })));
+  assert.deepEqual(pending.map(request => request.id), ['sad', 'angry']);
+  await act(async () => pending[1].resolve(new Response(null, { status: 204 })));
+  assert.equal(button('화났어요 표정 선택').getAttribute('aria-pressed'), 'true');
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'angry');
+});
+
+test('network and HTTP failures preserve selection and do not block later requests', async () => {
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    if (requests.length === 1) throw new TypeError('네트워크 연결 실패');
+    return new Response(null, { status: requests.length === 2 ? 503 : 204 });
+  };
+  await mount();
+  await click(button('슬퍼요 표정 선택'));
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'happy');
+  assert.match(document.querySelector('#toast').textContent, /네트워크 연결 실패/);
+  await act(async () => document.dispatchEvent(new window.KeyboardEvent('keydown', { key: '6', bubbles: true })));
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'happy');
+  assert.match(document.querySelector('#toast').textContent, /503/);
+  await click(button('화났어요 표정 선택'));
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'angry');
+  assert.deepEqual(requests.map(request => JSON.parse(request.body).expressionId), ['sad', 'love', 'angry']);
+});
+
+test('unmount discards queued device commands after an in-flight response arrives', async () => {
+  const pending = [];
+  globalThis.fetch = (url, options) => new Promise(resolve => {
+    pending.push({ id: JSON.parse(options.body).expressionId, resolve });
+  });
+  await mount();
+  await click(button('슬퍼요 표정 선택'));
+  await click(button('화났어요 표정 선택'));
+  await act(async () => root.unmount());
+  root = undefined;
+  await act(async () => pending[0].resolve(new Response(null, { status: 204 })));
+  assert.deepEqual(pending.map(request => request.id), ['sad']);
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'happy');
 });
 
 test('StrictMode editor supports drawing, undo, saving and library search', async () => {
@@ -96,6 +167,34 @@ test('StrictMode editor supports drawing, undo, saving and library search', asyn
   await click(button('React 테스트 표정 삭제'));
   assert.equal(document.querySelectorAll('.expression-card').length, 0);
   assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).custom.length, 0);
+});
+
+test('new expressions can be saved when crypto.randomUUID is unavailable', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const crypto = globalThis.crypto;
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    value: { getRandomValues: crypto.getRandomValues.bind(crypto) },
+  });
+  try {
+    await mount();
+    await click(button('새 표정 만들기'));
+    const canvas = document.querySelector('#pixel-editor');
+    await act(async () => {
+      canvas.focus();
+      canvas.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
+    });
+    await fill(document.querySelector('#expression-name'), 'HTTP에서 만든 표정');
+    await act(async () => document.querySelector('#expression-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    const saved = JSON.parse(localStorage.getItem('fado.workspace.v1'));
+    assert.equal(document.querySelector('dialog'), null);
+    assert.equal(saved.custom.length, 1);
+    assert.match(saved.custom[0].id, /^custom-[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+    assert.equal(saved.custom[0].name, 'HTTP에서 만든 표정');
+    assert.equal(saved.custom[0].bitmap.reduce((sum, pixel) => sum + pixel, 0), 16);
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', descriptor);
+  }
 });
 
 test('controlled settings form retains its draft while another setting changes', async () => {

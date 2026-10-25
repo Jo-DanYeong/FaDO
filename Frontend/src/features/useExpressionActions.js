@@ -1,23 +1,40 @@
+import { useCallback, useEffect, useRef } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { getExpressions, getSelectedExpression } from '../core/workspace.js';
 import { exportExpressionJson, exportExpressionPng } from '../services/export.js';
-import {sendExpression} from "../services/api.js";
+import { sendExpression } from '../services/api.js';
 
 export function useExpressionActions(openEditor) {
   const { state, dispatch } = useWorkspace();
   const notify = useToast();
+  const selectionQueue = useRef(Promise.resolve());
+  const active = useRef(true);
   const find = id => getExpressions(state).find(item => item.id === id);
 
-  return {
-      async select(id) {
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  const select = useCallback(id => {
+    dispatch({ type: 'stop-demo' });
+    // Keep device commands in click order, even when a response is slow.
+    const next = selectionQueue.current.then(async () => {
+      if (!active.current) return;
       try {
         await sendExpression(id);
-        dispatch({ type: 'select', id });
+        if (active.current) dispatch({ type: 'select', id });
       } catch (error) {
-        notify(error.message || '표정을 전송하지 못했어요.');
+        if (active.current) notify(error.message || '표정을 전송하지 못했어요.');
       }
-    },
+    });
+    selectionQueue.current = next;
+    return next;
+  }, [dispatch, notify]);
+
+  return {
+    select,
     edit(id) {
       const expression = id ? find(id) : undefined;
       if (id && !expression) return;

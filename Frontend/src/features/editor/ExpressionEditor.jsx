@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon.jsx';
 import { BitmapCanvas } from '../../components/BitmapCanvas.jsx';
 import { WIDTH, HEIGHT } from '../../utils/bitmap.js';
+import { createExpressionId } from '../../utils/id.js';
 import { createEditorModel } from './model.js';
 
 export function ExpressionEditor({ expression, onSave, onClose }) {
@@ -83,7 +84,7 @@ export function ExpressionEditor({ expression, onSave, onClose }) {
     if (!name.trim()) { setError('표정 이름을 입력해주세요.'); return; }
     if (model.isEmpty()) { setError('표정을 먼저 그려주세요.'); return; }
     onSave({
-      id: expression?.custom ? expression.id : `custom-${crypto.randomUUID()}`,
+      id: expression?.custom ? expression.id : createExpressionId(),
       name: name.trim(), bitmap: model.snapshot(), english: 'Custom', color: 'green', custom: true, note: '내가 만든 작은 표정',
     });
   }
