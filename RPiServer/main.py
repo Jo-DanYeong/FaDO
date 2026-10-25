@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from RaspberryPi import ImgTest
+from RaspberryPi import ImgTest, GifTest
+
 app = FastAPI()
 class ExpressionRequest(BaseModel):
     expressionId: str
@@ -22,3 +23,20 @@ def expression(request: ExpressionRequest):
         "message": "테스트 이미지 출력 안함",
         "expressionId": request.expressionId,
     }
+
+@app.post("/gif/{name}")
+def change_gif(name: str, HTTPException=None):
+    try:
+        GifTest.show_gif(name)
+
+        return {
+            "status": "accepted",
+            "gif": name
+        }
+
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(400, str(e))
+
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
