@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from RaspberryPi import ImgTest, GifTest
+from RPiServer.yolo_api import router as yolo_router
 
 app = FastAPI()
+app.include_router(yolo_router)
+
 class ExpressionRequest(BaseModel):
     expressionId: str
 
