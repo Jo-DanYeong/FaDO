@@ -1,0 +1,2 @@
+spring.application.name=Backend
+Raspberry.base-url=http://라즈베리파이_서버_주소:포트
