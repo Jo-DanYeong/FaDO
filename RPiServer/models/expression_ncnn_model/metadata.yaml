@@ -1,0 +1,24 @@
+description: Ultralytics YOLO26n-cls model trained on /content/FaDO_data/dataset
+author: Ultralytics
+date: '2026-10-26T23:05:37.300625+09:00'
+version: 8.4.188
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 1
+task: classify
+head: Classify
+batch: 1
+imgsz:
+- 160
+- 160
+names:
+  0: angry
+  1: happy
+  2: neutral
+  3: sad
+  4: surprised
+args:
+  batch: 1
+  quantize: null
+channels: 3
+end2end: false
