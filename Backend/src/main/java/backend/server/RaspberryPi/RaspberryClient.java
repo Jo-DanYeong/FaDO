@@ -52,7 +52,7 @@ public class RaspberryClient {
 
         try {
             DetectionResponse response = client.post()
-                    .uri("/predict")
+                    .uri("/yolo/predict")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .bodyValue(parts)
                     .retrieve()

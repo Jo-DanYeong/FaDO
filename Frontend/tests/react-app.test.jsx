@@ -13,7 +13,7 @@ window.HTMLElement.prototype.scrollIntoView = () => {};
 window.HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
 window.HTMLDialogElement.prototype.close = function close() { this.open = false; };
 window.HTMLCanvasElement.prototype.getContext = () => ({
-  fillRect() {}, clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeRect() {},
+  fillRect() {}, clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeRect() {}, drawImage() {},
   getImageData: () => ({ data: new Uint8ClampedArray(8192 * 4) }),
 });
 
@@ -31,6 +31,7 @@ const customExpression = {
 };
 let root;
 const originalFetch = globalThis.fetch;
+const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
 let requests;
 
 beforeEach(() => {
@@ -59,6 +60,8 @@ afterEach(async () => {
     document.body.replaceChildren();
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalMediaDevices) Object.defineProperty(navigator, 'mediaDevices', originalMediaDevices);
+    else delete navigator.mediaDevices;
   }
 });
 
@@ -368,7 +371,7 @@ test('saving edits automatically uploads the updated expression using the same I
   assert.equal(requests.length, 1);
   assert.equal(requests[0].body.get('expressionId'), customExpression.id);
   assert.equal(requests[0].body.get('name'), '수정한 표정');
-  assert.match(document.querySelector('#toast').textContent, /브라우저와 서버에 저장/);
+  assert.match(document.querySelector('#toast').textContent, /표정을 저장했어요/);
 });
 
 test('a failed automatic editor upload preserves the drawing locally and selecting retries it', async () => {
@@ -381,7 +384,7 @@ test('a failed automatic editor upload preserves the drawing locally and selecti
   assert.equal(document.querySelector('dialog'), null);
   assert.equal(saved.bitmap.reduce((sum, pixel) => sum + pixel, 0), 16);
   assert.equal(requests.length, 1);
-  assert.match(document.querySelector('#toast').textContent, /브라우저에 보관했지만 서버 저장에 실패/);
+  assert.match(document.querySelector('#toast').textContent, /표정을 서버에 저장하지 못했어요/);
   await navigate('library');
   await click(button('오프라인 표정 표정 선택'));
   assert.equal(requests.length, 3);
@@ -508,4 +511,109 @@ test('camera hook stops a permission result that arrives after leaving settings'
   assert.equal(stopped, 1);
   assert.match(document.querySelector('h1').textContent, /다채로운 마음/);
   delete navigator.mediaDevices;
+});
+
+async function enableCamera({ ready = true } = {}) {
+  let stopped = 0;
+  const stream = { getTracks: () => [{ stop() { stopped += 1; } }] };
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => stream } });
+  await mount('settings');
+  await click(button('카메라 켜기'));
+  const video = document.querySelector('#camera-video');
+  if (ready) Object.defineProperties(video, {
+    readyState: { configurable: true, value: 4 },
+    videoWidth: { configurable: true, value: 1280 },
+    videoHeight: { configurable: true, value: 720 },
+  });
+  return { video, stream, stopped: () => stopped };
+}
+
+test('laptop camera preview sends nothing until a single-frame inference test is requested', async () => {
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return new Response(JSON.stringify({ detections: [{ className: 'person', confidence: 0.962, box: [0, 0, 10, 10] }] }));
+  };
+  const camera = await enableCamera();
+  assert.equal(camera.video.srcObject, camera.stream);
+  assert.equal(camera.video.hidden, false);
+  assert.equal(requests.length, 0);
+  await click(button('카메라 인식 테스트'));
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/api/v1/detect');
+  assert.equal(requests[0].body.get('file').type, 'image/jpeg');
+  assert.match(document.querySelector('.detection-results').textContent, /person/);
+  assert.match(document.querySelector('.detection-results').textContent, /96\.2%/);
+  await click(button('카메라 끄기'));
+  assert.equal(camera.stopped(), 1);
+  assert.equal(camera.video.hidden, true);
+  assert.equal(button('카메라 인식 테스트').disabled, true);
+  assert.doesNotMatch(document.querySelector('.detection-results').textContent, /person/);
+});
+
+test('stopping the camera aborts inference and ignores a late result', async () => {
+  let resolve;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    return new Promise(done => { resolve = done; });
+  };
+  await enableCamera();
+  await click(button('카메라 인식 테스트'));
+  assert.equal(button('인식 중…').disabled, true);
+  await click(button('인식 중…'));
+  assert.equal(requests.length, 1);
+  await click(button('카메라 끄기'));
+  assert.equal(requests[0].signal.aborted, true);
+  await act(async () => resolve(new Response(JSON.stringify({ detections: [{ className: 'late-person', confidence: 1 }] }))));
+  assert.doesNotMatch(document.querySelector('.detection-results').textContent, /late-person/);
+  assert.equal(button('카메라 인식 테스트').disabled, true);
+});
+
+test('inference failure allows retry and empty detections are displayed explicitly', async () => {
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return requests.length === 1
+      ? new Response(JSON.stringify({ detail: 'RPi offline' }), { status: 502 })
+      : new Response(JSON.stringify({ detections: [] }));
+  };
+  await enableCamera();
+  await click(button('카메라 인식 테스트'));
+  assert.match(document.querySelector('#toast').textContent, /502.*RPi offline/);
+  assert.equal(button('카메라 인식 테스트').disabled, false);
+  await click(button('카메라 인식 테스트'));
+  assert.equal(requests.length, 2);
+  assert.match(document.querySelector('.detection-results').textContent, /인식된 대상이 없어요/);
+});
+
+test('leaving settings during frame encoding skips image transmission and stops the camera', async () => {
+  let encoded;
+  const camera = await enableCamera();
+  window.HTMLCanvasElement.prototype.toBlob = callback => { encoded = callback; };
+  await click(button('카메라 인식 테스트'));
+  await navigate('library');
+  assert.equal(camera.stopped(), 1);
+  await act(async () => encoded(new Blob(['frame'], { type: 'image/jpeg' })));
+  assert.equal(requests.length, 0);
+});
+
+test('leaving settings aborts an in-flight detection request without displaying stale results', async () => {
+  let resolve;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    return new Promise(done => { resolve = done; });
+  };
+  const camera = await enableCamera();
+  await click(button('카메라 인식 테스트'));
+  await navigate('library');
+  assert.equal(camera.stopped(), 1);
+  assert.equal(requests[0].signal.aborted, true);
+  await act(async () => resolve(new Response(JSON.stringify({ detections: [] }))));
+  assert.equal(document.querySelector('.detection-results'), null);
+});
+
+test('camera readiness errors do not submit a frame or leave the test button pending', async () => {
+  await enableCamera({ ready: false });
+  await click(button('카메라 인식 테스트'));
+  assert.equal(requests.length, 0);
+  assert.match(document.querySelector('#toast').textContent, /카메라 영상이 준비되지/);
+  assert.equal(button('카메라 인식 테스트').disabled, false);
 });
