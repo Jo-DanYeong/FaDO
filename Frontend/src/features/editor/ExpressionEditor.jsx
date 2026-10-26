@@ -108,7 +108,7 @@ export function ExpressionEditor({ expression, onSave, onClose }) {
           <div className="canvas-caption"><span><i className="status-dot" />128 × 64 px <span className="muted">· SSD1306</span></span><span>드래그해서 그려보세요</span></div>
           <div className="editor-fields"><label className="field">표정 이름 <input id="expression-name" maxLength={20} placeholder="예: 윙크하는 FaDO" required autoComplete="off" value={name} onChange={event => { setName(event.target.value); setError(''); }} /></label><div className="mini-preview"><span>OLED 미리보기</span><div><BitmapCanvas id="editor-preview" bitmap={preview} /></div></div></div>
           {error && <p className="editor-error" role="alert">{error}</p>}
-          <p className="editor-hint"><Icon name="info" />저장한 표정은 이 브라우저의 표정 라이브러리에 보관됩니다.</p>
+          <p className="editor-hint"><Icon name="info" />저장하면 브라우저에 보관하고 서버에도 자동으로 저장해요.</p>
         </div>
         <div className="dialog-footer"><button type="button" className="button button-secondary" onClick={onClose}>취소</button><button type="submit" className="button button-primary"><Icon name="check" />표정 저장하기</button></div>
       </form>

@@ -47,7 +47,7 @@ export function StudioPage({ actions }) {
       </div>
       <div className="studio-grid">
         <section className="card preview-card" aria-labelledby="preview-title">
-          <div className="card-header"><h2 id="preview-title"><Icon name="studio" />OLED 미리보기</h2><div className="card-header-right"><span className="subtle-status"><i className="status-dot" />PREVIEW</span><button className="icon-button" onClick={actions.exportPng} title="현재 표정 PNG 저장" aria-label="현재 표정 PNG 저장"><Icon name="download" /></button></div></div>
+          <div className="card-header"><h2 id="preview-title"><Icon name="studio" />OLED 미리보기</h2><div className="card-header-right"><span className="subtle-status" role="status">{actions.uploadingId ? '저장 중…' : 'PREVIEW'}</span><button className="icon-button" onClick={actions.exportPng} title="현재 표정 PNG 저장" aria-label="현재 표정 PNG 저장"><Icon name="download" /></button></div></div>
           <div className="display-stage">
             <div className="display-stage-top"><span>FaDO DISPLAY</span><span>01 / EXPRESSION</span></div>
             <div className="oled-device">
