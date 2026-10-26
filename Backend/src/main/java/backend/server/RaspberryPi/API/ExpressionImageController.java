@@ -1,6 +1,7 @@
 package backend.server.RaspberryPi.API;
 
 import backend.server.RaspberryPi.DTO.ExpressionImageResponse;
+import backend.server.RaspberryPi.RaspberryClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,10 @@ import java.util.Iterator;
 @RestController
 @RequestMapping("/api/v1/expression")
 public class ExpressionImageController {
+    private final RaspberryClient raspberryClient;
+    public ExpressionImageController(RaspberryClient raspberryClient) {
+        this.raspberryClient = raspberryClient;
+    }
     private final Path storageDirectory = Path.of("uploads", "expressions")
             .toAbsolutePath().normalize();
 
@@ -66,9 +71,12 @@ public class ExpressionImageController {
         Files.createDirectories(storageDirectory);
         String filename = expressionId + ".png";
         Path target = storageDirectory.resolve(filename);
+
         if (!ImageIO.write(image, "png", target.toFile())) {
             throw new IOException("PNG 파일을 저장하지 못했습니다.");
         }
+
+        raspberryClient.uploadExpressionImage(expressionId, name.trim(), Files.readAllBytes(target));
 
         return ResponseEntity.ok(new ExpressionImageResponse(
                 expressionId, name.trim(), filename, 128, 64
@@ -89,7 +97,10 @@ public class ExpressionImageController {
         if (Files.isDirectory(target)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "잘못된 경로요청");
         }
+
+        raspberryClient.deleteExpressionImage(expressionId);
         Files.deleteIfExists(target);
+
         return ResponseEntity.noContent().build();
     }
 }

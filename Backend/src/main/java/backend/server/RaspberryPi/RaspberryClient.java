@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.netty.http.client.HttpClient;
@@ -85,5 +86,47 @@ public class RaspberryClient {
                 .retrieve()
                 .toBodilessEntity()
                 .block();
+    }
+
+    public void uploadExpressionImage(String expressionId, String name, byte[] pngBytes) {
+        ByteArrayResource resource = new ByteArrayResource(pngBytes) {
+            @Override
+            public String getFilename() {
+                return expressionId + ".png";
+            }
+        };
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.IMAGE_PNG);
+        MultiValueMap<String, Object> parts = new LinkedMultiValueMap<>();
+        parts.add("expressionId", expressionId);
+        parts.add("name", name);
+        parts.add("file", new HttpEntity<>(resource, headers));
+        try {
+            client.post()
+                    .uri("/expression/image")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .bodyValue(parts)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+        } catch (WebClientException error) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY, "라파 PNG 저장에 실패했습니다.", error
+            );
+        }
+    }
+    public void deleteExpressionImage(String expressionId) {
+        try {
+            client.delete()
+                    .uri(builder -> builder.path("/expression/image")
+                            .queryParam("expressionId", expressionId).build())
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+        } catch (WebClientException error) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY, "라파 PNG 삭제에 실패했습니다.", error
+            );
+        }
     }
 }
