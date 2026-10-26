@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from RaspberryPi import ImgTest, GifTest
 from RPiServer.yolo_api import router as yolo_router
 from io import BytesIO
 from pathlib import Path
@@ -8,6 +7,8 @@ from threading import Lock
 from fastapi import File, Form, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 import re
+
+from RaspberryPi import ImgTest
 
 app = FastAPI()
 app.include_router(yolo_router)
@@ -66,8 +67,8 @@ def expression(request: ExpressionRequest):
     return {"expressionId": request.expressionId, "displayed": True}
 
 @app.delete("/expression/image", status_code=204)
-def delete_expression_image(expressionId: str):
-    target = expression_path(expressionId)
+def delete_expression_image(expressionid: str):
+    target = expression_path(expressionid)
     with expression_lock:
         if target.is_dir():
             raise HTTPException(status_code=409, detail="PNG 경로에 폴더가 있습니다")
