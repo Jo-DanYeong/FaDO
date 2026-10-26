@@ -24,7 +24,6 @@ class ExpressionRequest(BaseModel):
 def health():
     return {"Service": "RPiServer", "Status": "UP"}
 
-@app.post("/expression")
 def expression_path(expression_id: str) -> Path:
     if not re.fullmatch(r"[a-zA-Z0-9-]{1,100}", expression_id):
         raise HTTPException(status_code=400, detail="올바르지 않은 표정 ID")
@@ -67,8 +66,8 @@ def expression(request: ExpressionRequest):
     return {"expressionId": request.expressionId, "displayed": True}
 
 @app.delete("/expression/image", status_code=204)
-def delete_expression_image(expressionid: str):
-    target = expression_path(expressionid)
+def delete_expression_image(expressionId: str):
+    target = expression_path(expressionId)
     with expression_lock:
         if target.is_dir():
             raise HTTPException(status_code=409, detail="PNG 경로에 폴더가 있습니다")
