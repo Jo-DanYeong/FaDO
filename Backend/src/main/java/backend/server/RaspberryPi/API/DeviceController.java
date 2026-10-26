@@ -26,4 +26,9 @@ public class DeviceController {
 
         return ResponseEntity.ok("성공");
     }
+
+    @PostMapping("/expression/image")
+    public String changeExpressionImage(){
+        return "Page not Found\nError 404";
+    }
 }
