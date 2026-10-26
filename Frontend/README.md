@@ -96,6 +96,7 @@ tests/
 docs/png-upload-backend.txt          # Java PNG 수신·서버 파일 저장 예제
 docs/png-delete-backend.txt          # Java PNG 삭제 메서드 교체 예제
 docs/camera-inference-test.txt       # 노트북 카메라 테스트 순서·Java 요청 경로 수정
+docs/face-expression-yolo-api.py.txt  # 얼굴 검출 + 표정 분류용 라파 API 교체본
 dist/                              # 빌드 결과: 직접 수정하지 않음
 ```
 
@@ -171,13 +172,17 @@ dist/                              # 빌드 결과: 직접 수정하지 않음
 
 현재 Java `predict()`의 `/predict`와 라파의 `/yolo/predict`가 다르므로 [경로 수정 및 테스트 순서](docs/camera-inference-test.txt)를 먼저 적용해야 합니다. 설정 화면의 주소 입력값은 실제 Java → 라파 연결 주소를 변경하지 않습니다.
 
-확인한 모델 메타데이터는 COCO의 사람·물체 검출 모델입니다. `person` 등의 결과로 연결을 확인할 수 있으며, 웃음·슬픔 분류에는 표정 모델이 필요합니다. 테스트 결과가 OLED 표정을 자동으로 바꾸지는 않습니다.
+새 모델 메타데이터는 `face_detector_ncnn_model`(얼굴 검출, 416px)과 `expression_ncnn_model`(표정 분류, 160px)입니다. [라파 API 교체본](docs/face-expression-yolo-api.py.txt)을 실제 `RPiServer/yolo_api.py`에 적용하면 얼굴을 찾고 해당 영역을 잘라 표정을 분류합니다. 기존 `detections` 응답 형식이 유지되어 Java DTO 변경은 필요하지 않습니다. 화면에는 `angry`, `happy`, `neutral`, `sad`, `surprised`의 한국어 이름과 신뢰도를 표시합니다. `love`는 학습 클래스에 없으므로 수동 표정으로 사용할 수 있습니다.
+
+현재 원본 라파 API는 아직 COCO 모델을 가리키므로 교체본 적용과 라파 API 재시작이 필요합니다. `GET /yolo/model-info`의 `pipeline: face-expression`으로 적용 여부를 확인할 수 있습니다. 기본 형식은 NCNN이고, `FADO_MODEL_FORMAT=pt`를 지정하면 `face_detector.pt`, `expression.pt`를 사용합니다. 분류 모델의 결과는 `probs.top1/top1conf`에서 읽습니다. [Ultralytics 분류 결과 문서](https://docs.ultralytics.com/tasks/classify/)
+
+테스트 결과가 OLED 표정을 자동으로 바꾸지는 않습니다. 실제 모델 검증은 PC에서 `.pt` 모델 두 개와 합성 이미지로 수행했으며, 실제 카메라 영상·NCNN·라파 서버 연결은 별도로 확인해야 합니다.
 
 내보내는 JSON은 `version`, `name`, `width`, `height`, `format`, `pixels`를 포함합니다. `pixels`는 왼쪽 위부터 행 단위로 나열된 8,192개의 `0`/`1` 배열(`row-major-binary`)입니다. SSD1306 페이지 단위 바이트 변환과 I²C 전송은 백엔드에서 처리합니다.
 
 ## 테스트
 
-`npm test`는 Node 테스트 러너·tsx·jsdom으로 56개 테스트를 실행합니다. React 테스트는 `StrictMode`에서 실제 컴포넌트를 마운트해 선택 전 PNG 저장 순서, 편집 저장·수정 시 자동 업로드, 실패 시 로컬 보존과 재시도, 여러 저장·선택·삭제 요청의 순서, 이전 선택 응답이 새 편집 저장의 미리보기를 덮어쓰지 않는지, 앱 종료 후 대기 요청 정리, 편집·되돌리기·저장·검색, UUID API가 없는 환경의 저장, 설정 폼 유지, 타이머와 카메라 정리를 검증합니다. 캡처·인식 테스트는 영상 준비 상태, JPEG 크기·multipart 전송, 응답 형식·오류·재시도, 중복 요청 방지, 카메라 끄기·화면 이탈 시 요청 취소를 확인합니다. canvas 인코딩과 API는 모의 처리하고 카메라는 가짜 스트림을 사용하므로 테스트를 위해 실제 서버나 카메라 권한이 필요하지 않습니다.
+`npm test`는 Node 테스트 러너·tsx·jsdom으로 57개 테스트를 실행합니다. React 테스트는 `StrictMode`에서 실제 컴포넌트를 마운트해 선택 전 PNG 저장 순서, 편집 저장·수정 시 자동 업로드, 실패 시 로컬 보존과 재시도, 여러 저장·선택·삭제 요청의 순서, 이전 선택 응답이 새 편집 저장의 미리보기를 덮어쓰지 않는지, 앱 종료 후 대기 요청 정리, 편집·되돌리기·저장·검색, UUID API가 없는 환경의 저장, 설정 폼 유지, 타이머와 카메라 정리를 검증합니다. 캡처·인식 테스트는 영상 준비 상태, JPEG 크기·multipart 전송, 5개 표정의 이름 표시, 응답 형식·오류·재시도, 중복 요청 방지, 카메라 끄기·화면 이탈 시 요청 취소를 확인합니다. canvas 인코딩과 API는 모의 처리하고 카메라는 가짜 스트림을 사용하므로 테스트를 위해 실제 서버나 카메라 권한이 필요하지 않습니다.
 
 ## 참고
 

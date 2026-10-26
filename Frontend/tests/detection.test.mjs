@@ -57,7 +57,7 @@ test('capture reports unsupported canvas and encoding failure', async () => {
 
 test('inference sends one JPEG multipart file to Java and propagates the abort signal', async () => {
   const controller = new AbortController();
-  const detections = [{ className: 'person', confidence: 0.96, box: [0, 0, 100, 100] }];
+  const detections = [{ className: 'happy', confidence: 0.96, box: [0, 0, 100, 100] }];
   let request;
   globalThis.fetch = async (url, options) => {
     request = { url, ...options };

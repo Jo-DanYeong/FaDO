@@ -5,6 +5,9 @@ import { useWorkspace } from '../../context/WorkspaceContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { useCamera } from '../../hooks/useCamera.js';
 import { useDetection } from '../../hooks/useDetection.js';
+import { presets } from '../../data/presets.js';
+
+const expressionNames = new Map(presets.map(item => [item.id, item.name]));
 
 function SettingSwitch({ label, description, enabled, onChange }) {
   return <div className="setting-row separated"><div><strong>{label}</strong><p>{description}</p></div><button className={`toggle ${enabled ? 'on' : ''}`} role="switch" aria-checked={enabled} aria-label={label} onClick={onChange}><span /></button></div>;
@@ -75,9 +78,9 @@ export function SettingsPage() {
               </div>
             </div>
             <div className="detection-results" role="status" aria-live="polite">
-              <p className="detection-note">현재 기본 모델은 사람·물체를 인식해요. 웃음·슬픔을 구분하려면 표정 모델이 필요해요.</p>
+              <p className="detection-note">얼굴을 찾은 뒤 화남·행복·평온·슬픔·놀람을 분류해요. 얼굴이 카메라에 잘 보이도록 해주세요.</p>
               {detectionPending && <p>라파에서 이미지를 분석하고 있어요. 첫 요청은 모델 로딩으로 시간이 걸릴 수 있어요.</p>}
-              {detections && (detections.length ? <><h3>실제 인식 결과 · {detections.length}개</h3><ul>{detections.map((item, index) => <li key={index}><strong>{item.className}</strong><span>{(item.confidence * 100).toFixed(1)}%</span></li>)}</ul></> : <p>인식된 대상이 없어요. 사람이 화면에 보이도록 구도를 조절한 뒤 다시 테스트해보세요.</p>)}
+              {detections && (detections.length ? <><h3>실제 인식 결과 · {detections.length}개</h3><ul>{detections.map((item, index) => <li key={index}><span className="detection-label"><strong>{expressionNames.get(item.className) || item.className}</strong><small>{item.className}</small></span><span>{(item.confidence * 100).toFixed(1)}%</span></li>)}</ul></> : <p>얼굴을 찾지 못했어요. 얼굴이 정면으로 충분히 크게 보이도록 한 뒤 다시 테스트해보세요.</p>)}
             </div>
           </section>
         </div>

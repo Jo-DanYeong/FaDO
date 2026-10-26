@@ -531,7 +531,7 @@ async function enableCamera({ ready = true } = {}) {
 test('laptop camera preview sends nothing until a single-frame inference test is requested', async () => {
   globalThis.fetch = async (url, options) => {
     requests.push({ url, ...options });
-    return new Response(JSON.stringify({ detections: [{ className: 'person', confidence: 0.962, box: [0, 0, 10, 10] }] }));
+    return new Response(JSON.stringify({ detections: [{ className: 'happy', confidence: 0.962, box: [0, 0, 100, 100] }] }));
   };
   const camera = await enableCamera();
   assert.equal(camera.video.srcObject, camera.stream);
@@ -541,13 +541,14 @@ test('laptop camera preview sends nothing until a single-frame inference test is
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, '/api/v1/detect');
   assert.equal(requests[0].body.get('file').type, 'image/jpeg');
-  assert.match(document.querySelector('.detection-results').textContent, /person/);
+  assert.match(document.querySelector('.detection-results').textContent, /행복해요/);
+  assert.match(document.querySelector('.detection-results').textContent, /happy/);
   assert.match(document.querySelector('.detection-results').textContent, /96\.2%/);
   await click(button('카메라 끄기'));
   assert.equal(camera.stopped(), 1);
   assert.equal(camera.video.hidden, true);
   assert.equal(button('카메라 인식 테스트').disabled, true);
-  assert.doesNotMatch(document.querySelector('.detection-results').textContent, /person/);
+  assert.doesNotMatch(document.querySelector('.detection-results').textContent, /행복해요/);
 });
 
 test('stopping the camera aborts inference and ignores a late result', async () => {
@@ -568,6 +569,18 @@ test('stopping the camera aborts inference and ignores a late result', async () 
   assert.equal(button('카메라 인식 테스트').disabled, true);
 });
 
+test('the five trained expression classes display Korean names and model labels', async () => {
+  const labels = ['angry', 'happy', 'neutral', 'sad', 'surprised'];
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    detections: labels.map(className => ({ className, confidence: 0.9, box: [10, 20, 110, 120] })),
+  }));
+  await enableCamera();
+  await click(button('카메라 인식 테스트'));
+  assert.deepEqual([...document.querySelectorAll('.detection-label strong')].map(item => item.textContent),
+    ['화났어요', '행복해요', '평온해요', '슬퍼요', '놀랐어요']);
+  assert.deepEqual([...document.querySelectorAll('.detection-label small')].map(item => item.textContent), labels);
+});
+
 test('inference failure allows retry and empty detections are displayed explicitly', async () => {
   globalThis.fetch = async (url, options) => {
     requests.push({ url, ...options });
@@ -581,7 +594,7 @@ test('inference failure allows retry and empty detections are displayed explicit
   assert.equal(button('카메라 인식 테스트').disabled, false);
   await click(button('카메라 인식 테스트'));
   assert.equal(requests.length, 2);
-  assert.match(document.querySelector('.detection-results').textContent, /인식된 대상이 없어요/);
+  assert.match(document.querySelector('.detection-results').textContent, /얼굴을 찾지 못했어요/);
 });
 
 test('leaving settings during frame encoding skips image transmission and stops the camera', async () => {
