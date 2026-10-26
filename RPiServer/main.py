@@ -12,6 +12,10 @@ import re
 app = FastAPI()
 app.include_router(yolo_router)
 
+EXPRESSION_DIR = Path(__file__).resolve().parent / "expressions"
+expression_lock = Lock()
+MAX_PNG_BYTES = 1024 * 1024
+
 class ExpressionRequest(BaseModel):
     expressionId: str
 
@@ -20,28 +24,11 @@ def health():
     return {"Service": "RPiServer", "Status": "UP"}
 
 @app.post("/expression")
-def expression(request: ExpressionRequest):
-    print(f"받은 id : {request.expressionId}")
-    if request.expressionId == "happy":
-        ImgTest.show_image()
-        return {
-            "message": "테스트 이미지 출력 완료",
-            "expressionId": request.expressionId,
-        }
-    return {
-        "message": "테스트 이미지 출력 안함",
-        "expressionId": request.expressionId,
-	}
-
-EXPRESSION_DIR = Path(__file__).resolve().parent / "expressions"
-expression_lock = Lock()
-MAX_PNG_BYTES = 1024 * 1024
 def expression_path(expression_id: str) -> Path:
     if not re.fullmatch(r"[a-zA-Z0-9-]{1,100}", expression_id):
         raise HTTPException(status_code=400, detail="올바르지 않은 표정 ID")
     return EXPRESSION_DIR / f"{expression_id}.png"
-class ExpressionRequest(BaseModel):
-    expressionId: str
+
 @app.post("/expression/image")
 def upload_expression_image(
     expressionId: str = Form(...),
@@ -68,6 +55,7 @@ def upload_expression_image(
         EXPRESSION_DIR.mkdir(parents=True, exist_ok=True)
         target.write_bytes(png_bytes)
     return {"expressionId": expressionId, "name": name.strip(), "saved": True}
+
 @app.post("/expression")
 def expression(request: ExpressionRequest):
     target = expression_path(request.expressionId)
@@ -76,6 +64,7 @@ def expression(request: ExpressionRequest):
             raise HTTPException(status_code=404, detail="저장된 표정 PNG가 없습니다")
         ImgTest.show_image(target)
     return {"expressionId": request.expressionId, "displayed": True}
+
 @app.delete("/expression/image", status_code=204)
 def delete_expression_image(expressionId: str):
     target = expression_path(expressionId)
