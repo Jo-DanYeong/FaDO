@@ -3,3 +3,4 @@
 *.pyc
 **/*.properties
 /RPiServer/YoloTrain/
+/uploads/
