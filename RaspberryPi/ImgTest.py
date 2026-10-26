@@ -23,14 +23,12 @@ oled = adafruit_ssd1306.SSD1306_SPI(
 oled.fill(0)
 oled.show()
 
-def show_image():
-    with Image.open(IMAGE_PATH) as raw_image:
+def show_image(image_path=IMAGE_PATH):
+    with Image.open(image_path) as raw_image:
         resized_image = ImageOps.contain(raw_image, (WIDTH, HEIGHT))
         canvas = Image.new("1", (WIDTH, HEIGHT), 0)
-
         paste_x = (WIDTH - resized_image.width) // 2
         paste_y = (HEIGHT - resized_image.height) // 2
         canvas.paste(resized_image.convert("1"), (paste_x, paste_y))
-
         oled.image(canvas)
         oled.show()
