@@ -1,7 +1,7 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createExpressionPng } from '../src/services/png.js';
-import { deleteExpressionPng, uploadExpressionPng } from '../src/services/api.js';
+import { deleteExpressionPng, sendExpression, uploadExpressionPng } from '../src/services/api.js';
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
 const originalFetch = globalThis.fetch;
@@ -84,6 +84,32 @@ test('upload reports HTTP and network failures to its caller', async () => {
   await assert.rejects(uploadExpressionPng(expression), /PNG 전송 실패: 503/);
   globalThis.fetch = async () => { throw new TypeError('network offline'); };
   await assert.rejects(uploadExpressionPng(expression), /network offline/);
+});
+
+test('stopping during PNG encoding prevents upload and an aborted command is never sent', async () => {
+  const controller = new AbortController();
+  let encoded;
+  let calls = 0;
+  canvas.toBlob = callback => { encoded = callback; };
+  globalThis.fetch = async () => { calls += 1; return new Response(null, { status: 204 }); };
+  const pending = uploadExpressionPng(expression, { signal: controller.signal });
+  controller.abort();
+  encoded(png);
+  await assert.rejects(pending, { name: 'AbortError' });
+  await assert.rejects(sendExpression('happy', { signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(calls, 0);
+});
+
+test('PNG uploads and OLED commands share the live session abort signal', async () => {
+  const controller = new AbortController();
+  const signals = [];
+  globalThis.fetch = async (url, options) => {
+    signals.push(options.signal);
+    return new Response(null, { status: 204 });
+  };
+  await uploadExpressionPng(expression, { signal: controller.signal });
+  await sendExpression('happy', { signal: controller.signal });
+  assert.deepEqual(signals, [controller.signal, controller.signal]);
 });
 
 test('delete sends an encoded expressionId query parameter without a multipart body', async () => {

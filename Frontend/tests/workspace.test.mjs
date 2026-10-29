@@ -81,6 +81,15 @@ test('storage quota errors are reported without throwing', () => {
   assert.equal(saveWorkspace({}, { setItem() { throw new Error('quota'); } }), false);
 });
 
+test('camera recognition updates the preview without persisting camera results over the manual selection', () => {
+  const neutral = { ...builtin, id: 'neutral' };
+  const initial = createInitialWorkspace(readWorkspace(memoryStorage(null)), [builtin, neutral]);
+  const state = workspaceReducer(initial, { type: 'recognize-expression', id: 'neutral' });
+  assert.equal(state.selected, 'neutral');
+  assert.equal(state.persistedSelected, 'happy');
+  assert.equal(workspaceReducer(state, { type: 'recognize-expression', id: 'person' }), state);
+});
+
 test('unknown route names fall back without accepting inherited object keys', () => {
   assert.equal(resolvePage('#settings'), 'settings');
   assert.equal(resolvePage('#constructor'), 'studio');

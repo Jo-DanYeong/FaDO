@@ -34,6 +34,9 @@ export function workspaceReducer(state, action) {
     case 'select':
       if (!getExpressions(state).some(item => item.id === action.id)) return state;
       return { ...state, selected: action.id, persistedSelected: action.id, mode: 'manual', playing: false };
+    case 'recognize-expression':
+      if (!state.builtins.some(item => item.id === action.id)) return state;
+      return { ...state, selected: action.id, mode: 'manual', playing: false };
     case 'save-expression': {
       const expression = action.expression;
       const exists = state.custom.some(item => item.id === expression.id);

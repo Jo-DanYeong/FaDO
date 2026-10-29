@@ -53,9 +53,10 @@ src/
     useHashRoute.js                # 해시 변경 구독, 제목·스크롤 갱신
     useDemo.js                     # 데모 타이머 생성·정리
     useCamera.js                   # 로컬 카메라 요청, 화면 이탈·언마운트 정리
-    useDetection.js                # 카메라 단일 프레임 인식, 취소·결과 상태
+    useDetection.js                # 단일/반복 인식, OLED 자동 전송, 취소·결과 상태
   core/
     workspace.js                   # 순수 reducer, 초기 상태, 조회 함수
+    expressionRecognition.js       # 가장 큰 얼굴·신뢰도·연속 인식 기준
     router.js                      # 페이지 이름과 라우트 검증
   pages/
     studio/StudioPage.jsx          # OLED 미리보기, 표정 분포 예시, 자동 데모
@@ -93,9 +94,11 @@ tests/
   id.test.mjs                       # UUID 및 대체 ID 생성 검증
   png-upload.test.mjs               # PNG 생성 조건·multipart 파일 전송·오류 검증
   detection.test.mjs                # 카메라 캡처·인식 요청·응답·오류 검증
+  expression-recognition.test.mjs   # 표정 확인 횟수·얼굴 선택·불확실한 결과 처리
 docs/png-upload-backend.txt          # Java PNG 수신·서버 파일 저장 예제
 docs/png-delete-backend.txt          # Java PNG 삭제 메서드 교체 예제
 docs/camera-inference-test.txt       # 노트북 카메라 테스트 순서·Java 요청 경로 수정
+docs/camera-oled-auto.txt            # 웹 카메라 → 라파 인식 → OLED 자동 표시 실행 안내
 docs/face-expression-yolo-api.py.txt  # 얼굴 검출 + 표정 분류용 라파 API 교체본
 dist/                              # 빌드 결과: 직접 수정하지 않음
 ```
@@ -115,6 +118,7 @@ dist/                              # 빌드 결과: 직접 수정하지 않음
 - 기기 이름·서버 주소 저장, 카메라 좌우 반전, 예시 신뢰도 표시
 - 사용자 권한을 받은 로컬 카메라 미리보기와 페이지 이탈 시 스트림 종료
 - 버튼을 눌러 JPEG 한 장을 Java·라파에 보내는 인식 테스트와 실제 결과 표시
+- 반복 카메라 인식 후 기본 표정 PNG 저장·OLED 표시 명령 자동 전송
 - 반응형 화면, 키보드 조작, 감소된 모션 설정 지원
 
 기존 `localStorage` 키 `fado.workspace.v1`과 픽셀 JSON 형식을 유지했습니다. 이전 버전에서 만든 표정과 설정을 그대로 읽습니다. 수동으로 선택한 표정이 저장되며 자동 데모로 잠시 바뀐 표정은 마지막 수동 선택을 덮어쓰지 않습니다. 브라우저 데이터를 삭제하면 저장한 표정도 삭제되므로 중요한 표정은 JSON으로 내보내 보관해주세요.
@@ -160,29 +164,33 @@ dist/                              # 빌드 결과: 직접 수정하지 않음
 
 - 표정 선택 API 경로와 요청 형식은 `src/services/api.js`에 정의되어 있습니다. 추가 HTTP·WebSocket 통신 모듈도 `src/services/`에 둡니다.
 - `src/features/useExpressionActions.js`의 `select()`가 API 요청 순서와 성공·실패 처리를 관리합니다.
-- 서버의 인식 결과를 화면에 반영하려면 `src/core/workspace.js`에 해당 reducer 액션을 추가하고, React 훅에서 `useWorkspace()`의 `dispatch()`로 전달합니다.
+- 자동 인식은 `useDetection.js`에서 결과를 판단한 뒤 `actions.select(id, { signal, source: 'camera' })`를 호출합니다. PNG 저장·명령 성공 후 `recognize-expression` 액션으로 미리보기를 갱신합니다. 마지막 수동 선택은 덮어쓰지 않습니다.
 - 서버 저장으로 전환할 때는 `src/services/storage.js`와 `src/context/WorkspaceContext.jsx`의 저장 effect를 조정합니다.
 - Raspberry Pi 영상으로 전환할 때는 `useCamera.js`와 설정 화면의 영상 컴포넌트를 실제 스트림 규격에 맞게 연결합니다.
 
-스튜디오 표정 인식 수치는 **데모 예시**입니다. 설정의 카메라 인식 테스트는 서버 응답을 표시합니다. 프론트는 사용자의 선택·편집 저장 시 표정 PNG를 Java API에 자동 저장하고, 표정 선택 시에는 ID 명령도 전달합니다. 수신 예제를 백엔드에 추가해야 하며, Raspberry Pi로의 재전송과 실제 OLED 출력은 백엔드에서 처리해야 합니다. 설정의 서버 주소는 저장만 하며 실제 개발 API 연결 주소는 프록시 설정으로 지정합니다.
+스튜디오 표정 인식 수치는 **데모 예시**입니다. 실제 카메라 인식과 OLED 자동 표시는 설정 화면에서 실행합니다. PNG 저장과 ID 명령은 Java API를 거쳐 라파로 전달됩니다. 확인한 로컬 백엔드에는 이 전달 코드가 있으며, 실행 중인 Java·라파에도 반영되어 있어야 합니다. 설정의 서버 주소는 저장만 하며 실제 개발 API 연결 주소는 프록시 설정과 Java의 `Raspberry.base-url`로 지정합니다.
 
 ## 노트북 카메라로 인식 테스트
 
 라파 카메라 없이 설정 화면에서 `카메라 켜기` → 권한 허용 → 영상 확인 → `카메라 인식 테스트` 순서로 사용합니다. 미리보기만 켜면 전송하지 않고, 테스트 버튼을 누를 때 JPEG 한 장을 `POST /api/v1/detect`의 multipart `file`로 보냅니다. Java는 라파에 전달하고, 실제 `detections` 배열의 클래스와 신뢰도를 표시합니다. 영상·결과를 프론트 저장소에 보관하지 않습니다. 끄기·화면 이탈 시 트랙을 종료하고 대기 요청을 취소합니다.
 
-현재 Java `predict()`의 `/predict`와 라파의 `/yolo/predict`가 다르므로 [경로 수정 및 테스트 순서](docs/camera-inference-test.txt)를 먼저 적용해야 합니다. 설정 화면의 주소 입력값은 실제 Java → 라파 연결 주소를 변경하지 않습니다.
+확인한 로컬 Java `predict()`는 라파의 `/yolo/predict` 경로를 사용합니다. [단일 인식 테스트 안내](docs/camera-inference-test.txt)에서 요청 형식과 실행 순서를 확인할 수 있습니다. 설정 화면의 주소 입력값은 실제 Java → 라파 연결 주소를 변경하지 않습니다.
 
 새 모델 메타데이터는 `face_detector_ncnn_model`(얼굴 검출, 416px)과 `expression_ncnn_model`(표정 분류, 160px)입니다. [라파 API 교체본](docs/face-expression-yolo-api.py.txt)을 실제 `RPiServer/yolo_api.py`에 적용하면 얼굴을 찾고 해당 영역을 잘라 표정을 분류합니다. 기존 `detections` 응답 형식이 유지되어 Java DTO 변경은 필요하지 않습니다. 화면에는 `angry`, `happy`, `neutral`, `sad`, `surprised`의 한국어 이름과 신뢰도를 표시합니다. `love`는 학습 클래스에 없으므로 수동 표정으로 사용할 수 있습니다.
 
-현재 원본 라파 API는 아직 COCO 모델을 가리키므로 교체본 적용과 라파 API 재시작이 필요합니다. `GET /yolo/model-info`의 `pipeline: face-expression`으로 적용 여부를 확인할 수 있습니다. 기본 형식은 NCNN이고, `FADO_MODEL_FORMAT=pt`를 지정하면 `face_detector.pt`, `expression.pt`를 사용합니다. 분류 모델의 결과는 `probs.top1/top1conf`에서 읽습니다. [Ultralytics 분류 결과 문서](https://docs.ultralytics.com/tasks/classify/)
+확인한 로컬 라파 API에는 얼굴 검출·표정 분류가 반영되어 있습니다. 실제 라파의 `GET /yolo/model-info` 응답에서 `pipeline: face-expression`으로 배포 여부를 확인할 수 있습니다. 기본 형식은 NCNN이고, `FADO_MODEL_FORMAT=pt`를 지정하면 `face_detector.pt`, `expression.pt`를 사용합니다. 분류 모델의 결과는 `probs.top1/top1conf`에서 읽습니다. [Ultralytics 분류 결과 문서](https://docs.ultralytics.com/tasks/classify/)
 
-테스트 결과가 OLED 표정을 자동으로 바꾸지는 않습니다. 실제 모델 검증은 PC에서 `.pt` 모델 두 개와 합성 이미지로 수행했으며, 실제 카메라 영상·NCNN·라파 서버 연결은 별도로 확인해야 합니다.
+`카메라 인식 테스트`는 결과만 표시합니다. 같은 화면에서 **OLED 자동 표시 시작**을 누르면 반복 인식 후 OLED에 표정 PNG를 표시하도록 명령을 보냅니다. 가장 큰 얼굴의 신뢰도가 65% 이상이며 같은 표정이 2회 연속 나오면 PNG 저장 → ID 명령 순서로 전송합니다. 같은 표정은 다시 전송하지 않고, 얼굴이 없거나 불확실하면 마지막 OLED 화면을 유지합니다.
+
+추론과 필요한 OLED 전송이 끝난 뒤 750ms 후 다음 프레임을 캡처합니다. 서버 오류 시 자동 표시를 중지하고 다시 시작할 수 있습니다. 중지·카메라 끄기·화면 이탈 시 대기 요청과 다음 캡처를 취소합니다. 이미 서버가 받은 요청은 처리될 수 있습니다. 촬영 이미지와 인식 결과는 프론트 저장소에 보관하지 않으며, 서버에 저장하는 파일은 OLED용 표정 PNG입니다. 마지막 수동 선택은 자동 인식으로 덮어쓰지 않습니다.
+
+인식 기준은 `src/core/expressionRecognition.js`의 `recognitionPolicy`에서 변경합니다. [전체 실행 안내 TXT](docs/camera-oled-auto.txt)에 API 흐름과 오류 확인 방법을 정리했습니다. 실제 모델 검증은 PC에서 `.pt` 모델 두 개와 합성 이미지로 수행했으며, 실제 카메라 영상·NCNN·라파 OLED 출력은 별도로 확인해야 합니다.
 
 내보내는 JSON은 `version`, `name`, `width`, `height`, `format`, `pixels`를 포함합니다. `pixels`는 왼쪽 위부터 행 단위로 나열된 8,192개의 `0`/`1` 배열(`row-major-binary`)입니다. SSD1306 페이지 단위 바이트 변환과 I²C 전송은 백엔드에서 처리합니다.
 
 ## 테스트
 
-`npm test`는 Node 테스트 러너·tsx·jsdom으로 57개 테스트를 실행합니다. React 테스트는 `StrictMode`에서 실제 컴포넌트를 마운트해 선택 전 PNG 저장 순서, 편집 저장·수정 시 자동 업로드, 실패 시 로컬 보존과 재시도, 여러 저장·선택·삭제 요청의 순서, 이전 선택 응답이 새 편집 저장의 미리보기를 덮어쓰지 않는지, 앱 종료 후 대기 요청 정리, 편집·되돌리기·저장·검색, UUID API가 없는 환경의 저장, 설정 폼 유지, 타이머와 카메라 정리를 검증합니다. 캡처·인식 테스트는 영상 준비 상태, JPEG 크기·multipart 전송, 5개 표정의 이름 표시, 응답 형식·오류·재시도, 중복 요청 방지, 카메라 끄기·화면 이탈 시 요청 취소를 확인합니다. canvas 인코딩과 API는 모의 처리하고 카메라는 가짜 스트림을 사용하므로 테스트를 위해 실제 서버나 카메라 권한이 필요하지 않습니다.
+`npm test`는 Node 테스트 러너·tsx·jsdom으로 테스트를 실행합니다. React 테스트는 `StrictMode`에서 편집·저장·선택·삭제 순서, 실패 후 복구, 설정 폼 유지와 카메라 정리를 검증합니다. 자동 인식 테스트는 가장 큰 얼굴 선택, 신뢰도·연속 확인, 동일 표정 중복 전송 방지, PNG 저장 후 OLED 명령, 전송 중 다음 캡처 방지, 오류 후 재시작, 중지·화면 이탈·pagehide 시 취소 및 대기열의 오래된 명령 건너뛰기를 확인합니다. canvas·API·카메라는 모의 처리하므로 실제 카메라나 OLED 하드웨어 출력까지 검증하지는 않습니다.
 
 ## 참고
 
