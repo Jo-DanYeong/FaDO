@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon.jsx';
 import { PageHeading } from '../../components/PageHeading.jsx';
+import { BitmapCanvas } from '../../components/BitmapCanvas.jsx';
 import { useWorkspace } from '../../context/WorkspaceContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { useCamera } from '../../hooks/useCamera.js';
 import { useDetection } from '../../hooks/useDetection.js';
 import { presets } from '../../data/presets.js';
+import { recognitionPolicy } from '../../core/expressionRecognition.js';
 
 const expressionNames = new Map(presets.map(item => [item.id, item.name]));
 
@@ -13,13 +15,14 @@ function SettingSwitch({ label, description, enabled, onChange }) {
   return <div className="setting-row separated"><div><strong>{label}</strong><p>{description}</p></div><button className={`toggle ${enabled ? 'on' : ''}`} role="switch" aria-checked={enabled} aria-label={label} onClick={onChange}><span /></button></div>;
 }
 
-export function SettingsPage() {
+export function SettingsPage({ actions }) {
   const { state, dispatch } = useWorkspace();
   const settings = state.settings;
   const [draft, setDraft] = useState(() => ({ deviceName: settings.deviceName, host: settings.host }));
   const notify = useToast();
   const { camera, cameraPending, toggleCamera } = useCamera();
-  const { detections, detectionPending, detect } = useDetection(camera);
+  const { detections, detectionPending, detect, live, liveMessage, lastSentId, startLive, stopLive } = useDetection(camera, actions.select);
+  const sentExpression = state.builtins.find(item => item.id === lastSentId);
   const video = useRef(null);
   const updateSettings = patch => dispatch({ type: 'update-settings', patch });
 
@@ -65,17 +68,24 @@ export function SettingsPage() {
             </div>
           </section>
           <section className="card camera-card">
-            <div className="card-header"><h2><Icon name="camera" />카메라 확인</h2><span className="small-badge">LOCAL</span></div>
+            <div className="card-header"><h2><Icon name="camera" />카메라 · OLED 자동 표시</h2><span className="small-badge">{live ? 'AUTO' : 'CAMERA'}</span></div>
             <div className={`camera-view ${camera ? 'has-camera' : ''}`}>
               <video ref={video} id="camera-video" className={settings.mirror ? 'mirrored' : ''} autoPlay muted playsInline hidden={!camera} aria-label="로컬 카메라 미리보기" />
               {!camera && <span className="camera-placeholder"><Icon name="camera" /><strong>카메라를 확인해보세요</strong><span>브라우저 카메라 미리보기</span></span>}
             </div>
             <div className="camera-footer">
-              <p>인식 테스트를 누를 때만 이미지 한 장을<br /><span>Java 백엔드를 거쳐 라파 인식 서버로 보내요.</span></p>
+              <p>테스트는 한 장, 자동 표시는 이미지를 반복 전송해요.<br /><span>라파가 표정을 인식하면 해당 표정 PNG를 OLED에 표시해요.</span></p>
               <div className="camera-actions">
                 <button className="button button-secondary" onClick={toggleCamera} disabled={cameraPending}><Icon name={camera ? 'pause' : 'camera'} />{cameraPending ? '요청 중…' : camera ? '카메라 끄기' : '카메라 켜기'}</button>
-                <button className="button button-primary" onClick={() => detect(video.current)} disabled={!camera || detectionPending} aria-busy={detectionPending}><Icon name="scan" />{detectionPending ? '인식 중…' : '카메라 인식 테스트'}</button>
+                <button className="button button-secondary" onClick={() => detect(video.current)} disabled={!camera || detectionPending || live} aria-busy={detectionPending && !live}><Icon name="scan" />{detectionPending && !live ? '인식 중…' : '카메라 인식 테스트'}</button>
+                <button className="button button-primary" onClick={() => live ? stopLive() : startLive(video.current)} disabled={!camera || (!live && detectionPending)} aria-pressed={live}><Icon name={live ? 'pause' : 'play'} />{live ? 'OLED 자동 표시 중지' : 'OLED 자동 표시 시작'}</button>
               </div>
+            </div>
+            <div className="camera-oled-status" role="status" aria-live="polite">
+              <strong>{live ? '자동 인식 중' : 'OLED 자동 표시'}</strong>
+              <p>{liveMessage || '카메라를 켜고 자동 표시를 시작해주세요.'}</p>
+              {sentExpression && <div className="camera-oled-preview"><BitmapCanvas bitmap={sentExpression.bitmap} color="#ffffff" aria-label={`마지막 전송 PNG: ${sentExpression.name}`} /><span>마지막 전송 성공: {sentExpression.name}</span></div>}
+              <p className="detection-note">가장 큰 얼굴 · 신뢰도 {recognitionPolicy.minConfidence * 100}% 이상 · 같은 표정 {recognitionPolicy.confirmations}회 연속<br />표정이 바뀔 때만 OLED에 보내요. 얼굴이 없으면 마지막 표정을 유지해요.</p>
             </div>
             <div className="detection-results" role="status" aria-live="polite">
               <p className="detection-note">얼굴을 찾은 뒤 화남·행복·평온·슬픔·놀람을 분류해요. 얼굴이 카메라에 잘 보이도록 해주세요.</p>

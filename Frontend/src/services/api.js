@@ -1,10 +1,12 @@
 import { createExpressionPng } from './png.js';
 
-export async function sendExpression(expressionId) {
+export async function sendExpression(expressionId, { signal } = {}) {
+  signal?.throwIfAborted();
   const response = await fetch('/api/v1/expression', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ expressionId }),
+    signal,
   });
 
   if (!response.ok) {
@@ -12,8 +14,10 @@ export async function sendExpression(expressionId) {
   }
 }
 
-export async function uploadExpressionPng(expression) {
+export async function uploadExpressionPng(expression, { signal } = {}) {
+  signal?.throwIfAborted();
   const png = await createExpressionPng(expression);
+  signal?.throwIfAborted();
   const formData = new FormData();
   formData.append('expressionId', expression.id);
   formData.append('name', expression.name);
@@ -23,6 +27,7 @@ export async function uploadExpressionPng(expression) {
     method: 'POST',
     // The browser supplies Content-Type with the multipart boundary.
     body: formData,
+    signal,
   });
 
   if (!response.ok) {

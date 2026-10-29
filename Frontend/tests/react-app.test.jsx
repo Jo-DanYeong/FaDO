@@ -31,6 +31,8 @@ const customExpression = {
 };
 let root;
 const originalFetch = globalThis.fetch;
+const originalSetTimeout = globalThis.setTimeout;
+const originalClearTimeout = globalThis.clearTimeout;
 const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
 let requests;
 
@@ -60,6 +62,8 @@ afterEach(async () => {
     document.body.replaceChildren();
   } finally {
     globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
     if (originalMediaDevices) Object.defineProperty(navigator, 'mediaDevices', originalMediaDevices);
     else delete navigator.mediaDevices;
   }
@@ -629,4 +633,219 @@ test('camera readiness errors do not submit a frame or leave the test button pen
   assert.equal(requests.length, 0);
   assert.match(document.querySelector('#toast').textContent, /카메라 영상이 준비되지/);
   assert.equal(button('카메라 인식 테스트').disabled, false);
+});
+
+// Drive only the recognition delay; React and toast timers retain their real behavior.
+function recognitionClock() {
+  const timers = new Map();
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay !== 750) return originalSetTimeout(callback, delay, ...args);
+    const id = {};
+    timers.set(id, callback);
+    return id;
+  };
+  globalThis.clearTimeout = id => {
+    if (!timers.delete(id)) originalClearTimeout(id);
+  };
+  return {
+    get size() { return timers.size; },
+    async next() {
+      assert.equal(timers.size, 1, 'Exactly one future recognition frame should be scheduled');
+      const [id, callback] = [...timers][0];
+      timers.delete(id);
+      await act(async () => { callback(); });
+    },
+  };
+}
+
+const detectedFace = (className, confidence = 0.95, box = [0, 0, 100, 100]) => ({ className, confidence, box });
+function recognitionServer(frames) {
+  let frame = 0;
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return url === '/api/v1/detect'
+      ? new Response(JSON.stringify({ detections: frames[Math.min(frame++, frames.length - 1)] }))
+      : new Response(null, { status: 204 });
+  };
+}
+const oledRequests = () => requests.filter(item => item.url !== '/api/v1/detect');
+
+test('live camera recognition saves the preset PNG before the OLED command and sends only stable changes', async () => {
+  const clock = recognitionClock();
+  recognitionServer([
+    [detectedFace('sad')], [detectedFace('sad')], [detectedFace('sad')],
+    [], [detectedFace('happy', 0.4)], [detectedFace('person')],
+    [detectedFace('happy', 0.99, [0, 0, 20, 20]), detectedFace('angry')],
+    [detectedFace('angry'), detectedFace('happy', 0.99, [0, 0, 20, 20])],
+  ]);
+  await enableCamera();
+  assert.equal(requests.length, 0);
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(oledRequests().length, 0);
+  assert.equal(button('카메라 인식 테스트').disabled, true);
+  assert.equal(button('OLED 자동 표시 중지').disabled, false);
+  await clock.next();
+  assert.deepEqual(oledRequests().map(item => item.url), ['/api/v1/expression/image', '/api/v1/expression']);
+  assert.deepEqual(oledRequests().map(requestId), ['sad', 'sad']);
+  assert.match(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공: 슬퍼요/);
+  for (let i = 0; i < 5; i += 1) await clock.next();
+  assert.equal(oledRequests().length, 2);
+  await clock.next();
+  assert.deepEqual(oledRequests().map(requestId), ['sad', 'sad', 'angry', 'angry']);
+  assert.match(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공: 화났어요/);
+  assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).selected, 'happy');
+  await click(button('OLED 자동 표시 중지'));
+  assert.equal(clock.size, 0);
+  await navigate('studio');
+  assert.equal(document.querySelector('.large-face').getAttribute('aria-label'), '현재 표정: 화났어요');
+});
+
+test('live recognition waits for OLED delivery before capturing another frame', async () => {
+  const clock = recognitionClock();
+  let delivered;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    if (url === '/api/v1/detect') return Promise.resolve(new Response(JSON.stringify({ detections: [detectedFace('happy')] })));
+    if (url === '/api/v1/expression') return new Promise(resolve => { delivered = resolve; });
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+  await enableCamera();
+  await click(button('OLED 자동 표시 시작'));
+  await clock.next();
+  assert.equal(clock.size, 0);
+  assert.equal(requests.length, 4);
+  assert.doesNotMatch(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공/);
+  await act(async () => delivered(new Response(null, { status: 204 })));
+  assert.equal(clock.size, 1);
+  assert.match(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공: 행복해요/);
+});
+
+for (const failureUrl of ['/api/v1/expression/image', '/api/v1/expression']) {
+  test(`live recognition stops on ${failureUrl} failure and can retry the same expression`, async () => {
+    const clock = recognitionClock();
+    let fail = true;
+    globalThis.fetch = async (url, options) => {
+      requests.push({ url, ...options });
+      if (url === '/api/v1/detect') return new Response(JSON.stringify({ detections: [detectedFace('sad')] }));
+      return new Response(null, { status: fail && url === failureUrl ? 502 : 204 });
+    };
+    await enableCamera();
+    await click(button('OLED 자동 표시 시작'));
+    await clock.next();
+    assert.equal(clock.size, 0);
+    assert.match(document.querySelector('.camera-oled-status').textContent, /전송에 실패/);
+    assert.match(document.querySelector('#toast').textContent, /502/);
+    assert.doesNotMatch(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공/);
+    if (failureUrl.endsWith('/image')) assert.equal(requests.some(item => item.url === '/api/v1/expression'), false);
+    fail = false;
+    await click(button('OLED 자동 표시 시작'));
+    await clock.next();
+    assert.match(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공: 슬퍼요/);
+  });
+}
+
+test('stopping and restarting live recognition ignores the older session result', async () => {
+  const clock = recognitionClock();
+  let previous;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    if (requests.length === 1) return new Promise(resolve => { previous = resolve; });
+    return Promise.resolve(new Response(JSON.stringify({ detections: [detectedFace('sad')] })));
+  };
+  await enableCamera();
+  await click(button('OLED 자동 표시 시작'));
+  await click(button('OLED 자동 표시 중지'));
+  assert.equal(requests[0].signal.aborted, true);
+  await click(button('OLED 자동 표시 시작'));
+  await act(async () => previous(new Response(JSON.stringify({ detections: [detectedFace('angry')] }))));
+  assert.match(document.querySelector('.detection-results').textContent, /슬퍼요/);
+  assert.doesNotMatch(document.querySelector('.detection-results').textContent, /화났어요/);
+  assert.equal(oledRequests().length, 0);
+  assert.equal(clock.size, 1);
+});
+
+test('turning off the camera during PNG upload aborts it and prevents the OLED command', async () => {
+  const clock = recognitionClock();
+  let uploaded;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    if (url === '/api/v1/detect') return Promise.resolve(new Response(JSON.stringify({ detections: [detectedFace('sad')] })));
+    return new Promise(resolve => { uploaded = resolve; });
+  };
+  const camera = await enableCamera();
+  await click(button('OLED 자동 표시 시작'));
+  await clock.next();
+  assert.equal(oledRequests().length, 1);
+  await click(button('카메라 끄기'));
+  assert.equal(oledRequests()[0].signal.aborted, true);
+  assert.equal(camera.stopped(), 1);
+  await act(async () => uploaded(new Response(null, { status: 204 })));
+  assert.equal(oledRequests().length, 1);
+  assert.equal(clock.size, 0);
+  assert.equal(button('OLED 자동 표시 시작').disabled, true);
+});
+
+test('leaving settings during the OLED command aborts it and ignores a late success', async () => {
+  const clock = recognitionClock();
+  let delivered;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    if (url === '/api/v1/detect') return Promise.resolve(new Response(JSON.stringify({ detections: [detectedFace('sad')] })));
+    if (url === '/api/v1/expression') return new Promise(resolve => { delivered = resolve; });
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+  const camera = await enableCamera();
+  await click(button('OLED 자동 표시 시작'));
+  await clock.next();
+  await navigate('studio');
+  assert.equal(requests.at(-1).signal.aborted, true);
+  await act(async () => delivered(new Response(null, { status: 204 })));
+  assert.equal(camera.stopped(), 1);
+  assert.equal(clock.size, 0);
+  assert.equal(document.querySelector('.large-face').getAttribute('aria-label'), '현재 표정: 행복해요');
+});
+
+test('live inference failure stops the loop and pagehide cancels a restarted loop', async () => {
+  const clock = recognitionClock();
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+  await enableCamera();
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(clock.size, 0);
+  assert.match(document.querySelector('.camera-oled-status').textContent, /인식에 실패/);
+  assert.equal(button('OLED 자동 표시 시작').disabled, false);
+  recognitionServer([[detectedFace('happy')]]);
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(clock.size, 1);
+  await act(async () => window.dispatchEvent(new window.Event('pagehide')));
+  assert.equal(clock.size, 0);
+  assert.equal(button('OLED 자동 표시 시작').disabled, true);
+  assert.equal(oledRequests().length, 0);
+});
+
+test('stopping live mode skips a camera command queued behind an older manual selection', async () => {
+  const clock = recognitionClock();
+  let manualUploaded;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    if (requests.length === 1) return new Promise(resolve => { manualUploaded = resolve; });
+    if (url === '/api/v1/detect') return Promise.resolve(new Response(JSON.stringify({ detections: [detectedFace('angry')] })));
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) },
+  });
+  await mount();
+  await click(button('슬퍼요 표정 선택'));
+  await navigate('settings');
+  await click(button('카메라 켜기'));
+  Object.defineProperties(document.querySelector('#camera-video'), {
+    readyState: { configurable: true, value: 4 }, videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 },
+  });
+  await click(button('OLED 자동 표시 시작'));
+  await clock.next();
+  assert.equal(oledRequests().length, 1);
+  await click(button('OLED 자동 표시 중지'));
+  await act(async () => manualUploaded(new Response(null, { status: 204 })));
+  assert.deepEqual(oledRequests().map(requestId), ['sad', 'sad']);
+  assert.equal(clock.size, 0);
 });

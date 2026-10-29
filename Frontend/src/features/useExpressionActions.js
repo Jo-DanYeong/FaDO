@@ -29,22 +29,25 @@ export function useExpressionActions(openEditor) {
     return next;
   }, []);
 
-  const select = useCallback(id => {
+  const select = useCallback((id, { signal, source = 'manual' } = {}) => {
     const expression = expressions.get(id);
-    if (!expression || pendingDelete.current === id) return Promise.resolve(false);
+    if (!expression || pendingDelete.current === id || signal?.aborted) return Promise.resolve(false);
     const saveVersion = localSaveVersion.current;
     dispatch({ type: 'stop-demo' });
     return enqueue(async () => {
+      if (signal?.aborted) return false;
       setUploadingId(id);
       try {
-        await uploadExpressionPng(expression);
-        if (!active.current) return false;
-        await sendExpression(id);
+        await uploadExpressionPng(expression, { signal });
+        if (!active.current || signal?.aborted) return false;
+        await sendExpression(id, { signal });
         // Preserve a newer editor save while this older request was pending.
-        if (active.current && localSaveVersion.current === saveVersion) dispatch({ type: 'select', id });
-        return true;
+        if (active.current && !signal?.aborted && localSaveVersion.current === saveVersion) {
+          dispatch({ type: source === 'camera' ? 'recognize-expression' : 'select', id });
+        }
+        return active.current && !signal?.aborted;
       } catch (error) {
-        if (active.current) notify(error.message || '표정을 전송하지 못했어요.');
+        if (active.current && !signal?.aborted) notify(error.message || '표정을 전송하지 못했어요.');
         return false;
       } finally {
         if (active.current) setUploadingId(null);
