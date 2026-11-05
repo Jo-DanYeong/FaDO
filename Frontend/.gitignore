@@ -231,3 +231,6 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/node,intellij+all
+/docs/camera_stream.py.txt
+/docs/raspberry-camera-setup.txt
+/docs/RaspberryCameraController.java.txt
