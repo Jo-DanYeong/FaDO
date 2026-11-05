@@ -13,5 +13,5 @@ export function useCamera() {
       service.stop();
     };
   }, [service]);
-  return { ...state, toggleCamera: service.toggle };
+  return { ...state, toggleCamera: service.toggle, stopCamera: service.stop };
 }

@@ -35,9 +35,11 @@ const originalSetTimeout = globalThis.setTimeout;
 const originalClearTimeout = globalThis.clearTimeout;
 const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
 let requests;
+let healthFetch;
 
 beforeEach(() => {
   requests = [];
+  healthFetch = async () => new Response(JSON.stringify({ Service: 'RPiServer', Status: 'UP' }));
   window.HTMLCanvasElement.prototype.toBlob = (callback, type) => {
     callback(new Blob([new Uint8Array([137, 80, 78, 71])], { type }));
   };
@@ -48,6 +50,9 @@ beforeEach(() => {
 });
 
 async function mount(page = 'studio', custom = [], selected = 'happy') {
+  // Keep background health requests separate from expression/camera assertions.
+  const fetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => url === '/api/v1/raspberry/health' ? healthFetch(url, options) : fetch(url, options);
   localStorage.clear();
   window.history.replaceState(null, '', `#${page}`);
   document.body.replaceChildren(document.createElement('div'));
@@ -473,6 +478,25 @@ test('controlled settings form retains its draft while another setting changes',
   assert.equal(JSON.parse(localStorage.getItem('fado.workspace.v1')).settings.deviceName, '아직 저장하지 않은 이름');
 });
 
+test('sidebar and settings share the same real device health status', async () => {
+  let resolve;
+  const signals = [];
+  healthFetch = (url, options) => {
+    signals.push(options.signal);
+    return new Promise(done => { resolve = done; });
+  };
+  await mount('settings');
+  assert.match(document.querySelector('.sidebar-device').textContent, /연결 확인 중/);
+  assert.match(document.querySelector('.settings-card .neutral-badge').textContent, /연결 확인 중/);
+  assert.equal(signals[0].aborted, true, 'StrictMode cancels its initial health request');
+  await act(async () => resolve(new Response(JSON.stringify({ Service: 'RPiServer', Status: 'UP' }))));
+  assert.match(document.querySelector('.sidebar-device').textContent, /기기 연결됨/);
+  assert.equal(document.querySelector('.settings-card .neutral-badge').textContent, '연결됨');
+  assert.ok(document.querySelector('.sidebar-device .connected-dot'));
+  await navigate('library');
+  assert.equal(signals.length, 2, 'Navigation must not start a second health poller');
+});
+
 test('demo effect has one timer and cleans it up on navigation and unmount', async () => {
   const start = globalThis.setInterval;
   const stop = globalThis.clearInterval;
@@ -668,7 +692,7 @@ function recognitionServer(frames) {
       : new Response(null, { status: 204 });
   };
 }
-const oledRequests = () => requests.filter(item => item.url !== '/api/v1/detect');
+const oledRequests = () => requests.filter(item => !['/api/v1/detect', '/api/v1/raspberry/camera/detect'].includes(item.url));
 
 test('live camera recognition saves the preset PNG before the OLED command and sends only stable changes', async () => {
   const clock = recognitionClock();
@@ -848,4 +872,106 @@ test('stopping live mode skips a camera command queued behind an older manual se
   await act(async () => manualUploaded(new Response(null, { status: 204 })));
   assert.deepEqual(oledRequests().map(requestId), ['sad', 'sad']);
   assert.equal(clock.size, 0);
+});
+
+test('Pi source detects without laptop camera permission and does not start capturing on source selection', async () => {
+  let permissions = 0;
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+    getUserMedia() { permissions += 1; throw new Error('Laptop camera must not be opened'); },
+  } });
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return new Response(JSON.stringify({ detections: [detectedFace('happy')] }));
+  };
+  await mount('settings');
+  await click(button('라파 카메라'));
+  assert.equal(requests.length, 0);
+  assert.equal(button('카메라 인식 테스트').disabled, false);
+  assert.equal(document.querySelector('#camera-video').hidden, true);
+  await click(button('카메라 인식 테스트'));
+  assert.equal(permissions, 0);
+  assert.deepEqual(requests.map(item => item.url), ['/api/v1/raspberry/camera/detect']);
+  assert.equal(requests[0].body, undefined);
+  assert.match(document.querySelector('.detection-results').textContent, /행복해요/);
+});
+
+test('Pi camera stable results use the same ordered PNG upload and OLED command with deduplication', async () => {
+  const clock = recognitionClock();
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return url === '/api/v1/raspberry/camera/detect'
+      ? new Response(JSON.stringify({ detections: [detectedFace('sad')] }))
+      : new Response(null, { status: 204 });
+  };
+  await mount('settings');
+  await click(button('라파 카메라'));
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(oledRequests().length, 0);
+  await clock.next();
+  assert.deepEqual(requests.map(item => item.url), [
+    '/api/v1/raspberry/camera/detect', '/api/v1/raspberry/camera/detect',
+    '/api/v1/expression/image', '/api/v1/expression',
+  ]);
+  assert.deepEqual(oledRequests().map(requestId), ['sad', 'sad']);
+  assert.match(document.querySelector('.camera-oled-status').textContent, /마지막 전송 성공: 슬퍼요/);
+  await clock.next();
+  assert.equal(oledRequests().length, 2);
+  await click(button('OLED 자동 표시 중지'));
+  assert.equal(clock.size, 0);
+});
+
+test('switching away from a Pi request aborts it, clears results and ignores late inference', async () => {
+  const clock = recognitionClock();
+  let resolve;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    return new Promise(done => { resolve = done; });
+  };
+  await mount('settings');
+  await click(button('라파 카메라'));
+  await click(button('OLED 자동 표시 시작'));
+  await click(button('노트북 카메라'));
+  assert.equal(requests[0].signal.aborted, true);
+  assert.equal(button('OLED 자동 표시 시작').disabled, true);
+  await act(async () => resolve(new Response(JSON.stringify({ detections: [detectedFace('angry')] }))));
+  assert.equal(clock.size, 0);
+  assert.equal(oledRequests().length, 0);
+  assert.doesNotMatch(document.querySelector('.detection-results').textContent, /화났어요/);
+});
+
+test('switching from laptop to Pi stops the laptop stream and cancels its live session', async () => {
+  const clock = recognitionClock();
+  recognitionServer([[detectedFace('happy')]]);
+  const camera = await enableCamera();
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(clock.size, 1);
+  await click(button('라파 카메라'));
+  assert.equal(camera.stopped(), 1);
+  assert.equal(clock.size, 0);
+  assert.equal(button('OLED 자동 표시 시작').disabled, false);
+  assert.equal(requests.length, 1);
+});
+
+test('Pi camera API errors stop auto mode and allow retry after leaving and returning to settings', async () => {
+  const clock = recognitionClock();
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Pi camera credentials missing' }), { status: 503 });
+  await mount('settings');
+  await click(button('라파 카메라'));
+  await click(button('OLED 자동 표시 시작'));
+  assert.match(document.querySelector('#toast').textContent, /503.*credentials missing/);
+  assert.equal(button('OLED 자동 표시 시작').disabled, false);
+  assert.equal(clock.size, 0);
+  let resolve;
+  globalThis.fetch = (url, options) => {
+    requests.push({ url, ...options });
+    return new Promise(done => { resolve = done; });
+  };
+  await click(button('OLED 자동 표시 시작'));
+  await navigate('library');
+  assert.equal(requests.at(-1).signal.aborted, true);
+  await act(async () => resolve(new Response(JSON.stringify({ detections: [detectedFace('happy')] }))));
+  assert.equal(clock.size, 0);
+  assert.equal(oledRequests().length, 0);
+  await navigate('settings');
+  assert.equal(button('노트북 카메라').getAttribute('aria-pressed'), 'true');
 });

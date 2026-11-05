@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '../context/ToastContext.jsx';
-import { captureCameraFrame, detectCameraFrame } from '../services/detection.js';
+import { captureCameraFrame, detectCameraFrame, detectRaspberryCamera } from '../services/detection.js';
 import { createExpressionTracker, recognitionPolicy } from '../core/expressionRecognition.js';
 
 const messages = {
@@ -12,7 +12,7 @@ const messages = {
   stable: '표정이 유지되고 있어요.',
 };
 
-export function useDetection(camera, selectExpression) {
+export function useDetection(camera, selectExpression, source = 'local') {
   const [detections, setDetections] = useState(null);
   const [pending, setPending] = useState(false);
   const [live, setLive] = useState(false);
@@ -44,17 +44,17 @@ export function useDetection(camera, selectExpression) {
     setLiveMessage('');
     setLastSentId(null);
     window.addEventListener('pagehide', stopLive);
-    const tracks = camera?.getTracks() || [];
+    const tracks = source === 'local' ? camera?.getTracks() || [] : [];
     tracks.forEach(track => track.addEventListener?.('ended', stopLive));
     return () => {
       window.removeEventListener('pagehide', stopLive);
       tracks.forEach(track => track.removeEventListener?.('ended', stopLive));
       cancel();
     };
-  }, [camera, cancel, stopLive]);
+  }, [camera, source, cancel, stopLive]);
 
   function start(video, continuous) {
-    if (!camera || current.current) return;
+    if ((source === 'local' && !camera) || current.current) return;
     const run = { controller: new AbortController(), timer: null };
     const tracker = createExpressionTracker();
     let sentId = null;
@@ -71,9 +71,14 @@ export function useDetection(camera, selectExpression) {
       if (!isCurrent()) return;
       setPending(true);
       try {
-        const frame = await captureCameraFrame(video);
-        if (!isCurrent()) return;
-        const result = await detectCameraFrame(frame, { signal: run.controller.signal });
+        let result;
+        if (source === 'raspberry') {
+          result = await detectRaspberryCamera({ signal: run.controller.signal });
+        } else {
+          const frame = await captureCameraFrame(video);
+          if (!isCurrent()) return;
+          result = await detectCameraFrame(frame, { signal: run.controller.signal });
+        }
         if (!isCurrent()) return;
         setDetections(result);
         if (continuous) {

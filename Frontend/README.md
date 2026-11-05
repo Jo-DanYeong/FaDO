@@ -45,6 +45,7 @@ src/
     PageHeading.jsx                # 공통 페이지 제목
     ExpressionCard.jsx             # 표정 선택·수정·삭제·내보내기 카드
     BitmapCanvas.jsx               # ref와 effect로 픽셀을 그리는 캔버스
+    DeviceConnectionStatus.jsx     # 연결 확인 중·연결됨·미연결 공통 표시
     Icon.jsx                       # 문자열 삽입을 사용하지 않는 SVG 컴포넌트
   context/
     WorkspaceContext.jsx           # useReducer 상태, 저장 데이터 읽기·쓰기
@@ -54,6 +55,7 @@ src/
     useDemo.js                     # 데모 타이머 생성·정리
     useCamera.js                   # 로컬 카메라 요청, 화면 이탈·언마운트 정리
     useDetection.js                # 단일/반복 인식, OLED 자동 전송, 취소·결과 상태
+    useDeviceConnection.js         # 라파 상태 확인·타임아웃·주기적 재확인
   core/
     workspace.js                   # 순수 reducer, 초기 상태, 조회 함수
     expressionRecognition.js       # 가장 큰 얼굴·신뢰도·연속 인식 기준
@@ -70,6 +72,7 @@ src/
       model.js                     # React·DOM에 의존하지 않는 픽셀 편집 모델
   services/
     api.js                         # Java 백엔드에 표정 선택 요청
+    connection.js                  # Java를 거친 라파 health 응답 확인
     png.js                         # 다운로드·업로드 공통 128 × 64 PNG 생성
     storage.js                     # 기존 localStorage 형식과 호환되는 저장 계층
     camera.js                      # 권한 요청, 지연 응답 취소, 스트림 종료
@@ -95,6 +98,7 @@ tests/
   png-upload.test.mjs               # PNG 생성 조건·multipart 파일 전송·오류 검증
   detection.test.mjs                # 카메라 캡처·인식 요청·응답·오류 검증
   expression-recognition.test.mjs   # 표정 확인 횟수·얼굴 선택·불확실한 결과 처리
+  connection.test.jsx              # 연결 끊김·복구·타임아웃·요청 정리 검증
 docs/png-upload-backend.txt          # Java PNG 수신·서버 파일 저장 예제
 docs/png-delete-backend.txt          # Java PNG 삭제 메서드 교체 예제
 docs/camera-inference-test.txt       # 노트북 카메라 테스트 순서·Java 요청 경로 수정
@@ -169,6 +173,24 @@ dist/                              # 빌드 결과: 직접 수정하지 않음
 - Raspberry Pi 영상으로 전환할 때는 `useCamera.js`와 설정 화면의 영상 컴포넌트를 실제 스트림 규격에 맞게 연결합니다.
 
 스튜디오 표정 인식 수치는 **데모 예시**입니다. 실제 카메라 인식과 OLED 자동 표시는 설정 화면에서 실행합니다. PNG 저장과 ID 명령은 Java API를 거쳐 라파로 전달됩니다. 확인한 로컬 백엔드에는 이 전달 코드가 있으며, 실행 중인 Java·라파에도 반영되어 있어야 합니다. 설정의 서버 주소는 저장만 하며 실제 개발 API 연결 주소는 프록시 설정과 Java의 `Raspberry.base-url`로 지정합니다.
+
+## 기기 연결 상태 표시
+
+`App.jsx`에서 `useDeviceConnection()`을 한 번 실행하고, 사이드바와 설정 화면에 같은 상태를 전달합니다. 처음에는 `연결 확인 중`, 정상 응답이면 초록 점과 `기기 연결됨`, 오류나 타임아웃이면 회색 점과 `기기 미연결`을 표시합니다. 실제 표시는 `DeviceConnectionStatus.jsx`에서 처리합니다.
+
+확인 경로는 브라우저 `GET /api/v1/raspberry/health` → Java `RaspberryClient.health()` → 라파 `GET /health`입니다. HTTP 성공과 `{ "Service": "RPiServer", "Status": "UP" }` 응답을 함께 확인하므로 Java만 실행 중이거나 HTML 응답을 받으면 연결됨으로 표시하지 않습니다. 이 상태는 라파 API의 응답 여부이며 OLED 출력이나 모델 준비 여부를 검사하지는 않습니다.
+
+화면을 열 때 즉시 확인하고, 완료 후 5초 뒤 다시 확인합니다. 요청당 3초 제한이며 요청을 겹쳐 보내지 않습니다. 앱을 닫거나 언마운트하면 타이머와 요청을 정리합니다. 연결 상태는 저장하지 않습니다. 주기와 제한 시간은 `src/services/connection.js`의 `connectionPolicy`에서 변경할 수 있습니다. 설정에 적은 서버 주소는 메모용이며 실제 라파 연결 대상은 Java의 `Raspberry.base-url`을 사용합니다.
+
+## 라파 카메라로 인식하고 OLED 변경
+
+설정 화면에서 **라파 카메라 → OLED 자동 표시 시작**을 선택합니다. 라파가 직접 촬영하고 얼굴·표정을 인식하며, 프론트가 그 결과에 맞춰 PNG 저장 후 OLED 표시 명령을 보냅니다. 노트북 카메라 권한은 사용하지 않습니다. 이 화면에는 영상 대신 인식 결과와 OLED용 PNG를 표시하며, 기존 라파 `/camera` 영상 스트림은 유지합니다.
+
+이 기능에는 새 Java·라파 API가 필요합니다. [적용 안내](docs/raspberry-camera-setup.txt)에 따라 [Java 컨트롤러 TXT](docs/RaspberryCameraController.java.txt)를 새 클래스로 추가하고 [라파 camera_stream.py 교체본 TXT](docs/camera_stream.py.txt)를 적용한 뒤 서버를 재시작하세요. Java와 라파의 카메라 인증 정보를 맞춰야 하며 프론트에는 비밀번호를 저장하지 않습니다. 실제 백엔드 원본 파일은 이번 변경에서 직접 수정하지 않았습니다.
+
+`POST /api/v1/raspberry/camera/detect` → Java 인증 → 라파 `POST /camera/detect`가 새 추론을 기다리고 기존 `detections` 형식으로 반환합니다. 선택 기준과 저장·OLED 전송 순서는 노트북 모드와 공유합니다. 카메라 입력을 바꾸면 이전 요청과 노트북 스트림을 종료합니다. 자동 표시는 웹에서 시작한 루프가 실행되는 동안 동작합니다.
+
+라파 TXT는 `tests/raspberry_camera_backend_test.py`에서 모의 카메라로 새 추론 대기·빈 얼굴 결과·오류·인증을 검증합니다. 실제 카메라·NCNN·OLED 하드웨어 출력은 별도로 확인해야 합니다.
 
 ## 노트북 카메라로 인식 테스트
 

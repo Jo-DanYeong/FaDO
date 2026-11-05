@@ -22,6 +22,15 @@ export async function detectCameraFrame(frame, { signal } = {}) {
   const body = new FormData();
   body.append('file', frame, 'camera-frame.jpg');
   const response = await fetch('/api/v1/detect', { method: 'POST', body, signal });
+  return readDetections(response);
+}
+
+export async function detectRaspberryCamera({ signal } = {}) {
+  const response = await fetch('/api/v1/raspberry/camera/detect', { method: 'POST', cache: 'no-store', signal });
+  return readDetections(response);
+}
+
+async function readDetections(response) {
   if (!response.ok) {
     let detail;
     try {

@@ -1,6 +1,6 @@
 import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { captureCameraFrame, detectCameraFrame } from '../src/services/detection.js';
+import { captureCameraFrame, detectCameraFrame, detectRaspberryCamera } from '../src/services/detection.js';
 
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
 const originalFetch = globalThis.fetch;
@@ -93,4 +93,30 @@ test('inference accepts empty results and rejects malformed labels or confidence
     globalThis.fetch = async () => new Response(JSON.stringify(result));
     await assert.rejects(detectCameraFrame(jpeg), /응답 형식/);
   }
+});
+
+test('Pi camera detection asks Java to capture on the Pi, without uploading a laptop image or credentials', async () => {
+  const controller = new AbortController();
+  const detections = [{ className: 'sad', confidence: 0.9, box: [0, 0, 120, 120] }];
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options };
+    return new Response(JSON.stringify({ detections }));
+  };
+  assert.deepEqual(await detectRaspberryCamera({ signal: controller.signal }), detections);
+  assert.equal(request.url, '/api/v1/raspberry/camera/detect');
+  assert.equal(request.method, 'POST');
+  assert.equal(request.body, undefined);
+  assert.equal(request.headers, undefined);
+  assert.equal(request.cache, 'no-store');
+  assert.equal(request.signal, controller.signal);
+});
+
+test('Pi detection exposes missing API, camera/auth failures and rejects invalid detection results', async () => {
+  for (const status of [401, 404, 503, 504]) {
+    globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'camera unavailable' }), { status });
+    await assert.rejects(detectRaspberryCamera(), new RegExp(`${status}.*camera unavailable`));
+  }
+  globalThis.fetch = async () => new Response(JSON.stringify({ detections: [{ className: 'happy', confidence: 2 }] }));
+  await assert.rejects(detectRaspberryCamera(), /응답 형식/);
 });

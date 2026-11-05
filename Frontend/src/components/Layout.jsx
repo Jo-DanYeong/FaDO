@@ -3,10 +3,11 @@ import { Icon, Logo } from './Icon.jsx';
 import { useWorkspace } from '../context/WorkspaceContext.jsx';
 import { getExpressions } from '../core/workspace.js';
 import { pageLabels } from '../core/router.js';
+import { DeviceConnectionStatus } from './DeviceConnectionStatus.jsx';
 
 const navigation = [['studio', 'studio'], ['library', 'grid'], ['settings', 'settings']];
 
-export function Layout({ page, children }) {
+export function Layout({ page, children, connectionStatus }) {
   const { state } = useWorkspace();
   const [menuOpen, setMenuOpen] = useState(false);
   const main = useRef(null);
@@ -46,7 +47,7 @@ export function Layout({ page, children }) {
           </nav>
           <div className="sidebar-device">
             <div className="sidebar-device-icon"><Icon name="chip" /></div>
-            <div><strong>{state.settings.deviceName}</strong><span><i className="status-dot muted-dot" />기기 미연결</span></div>
+            <div><strong>{state.settings.deviceName}</strong><DeviceConnectionStatus status={connectionStatus} /></div>
             <a href="#settings" onClick={closeMenu} className="tiny-link" aria-label="기기 설정"><Icon name="chevron" /></a>
           </div>
           <div className="sidebar-bottom">

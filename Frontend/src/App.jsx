@@ -4,6 +4,7 @@ import { useWorkspace } from './context/WorkspaceContext.jsx';
 import { useHashRoute } from './hooks/useHashRoute.js';
 import { useDemo } from './hooks/useDemo.js';
 import { useExpressionActions } from './features/useExpressionActions.js';
+import { useDeviceConnection } from './hooks/useDeviceConnection.js';
 const StudioPage = lazy(() => import(/* webpackChunkName: "studio" */ './pages/studio/StudioPage.jsx').then(module => ({ default: module.StudioPage })));
 const LibraryPage = lazy(() => import(/* webpackChunkName: "library" */ './pages/library/LibraryPage.jsx').then(module => ({ default: module.LibraryPage })));
 const SettingsPage = lazy(() => import(/* webpackChunkName: "settings" */ './pages/settings/SettingsPage.jsx').then(module => ({ default: module.SettingsPage })));
@@ -14,6 +15,7 @@ const pages = { studio: StudioPage, library: LibraryPage, settings: SettingsPage
 
 export function App() {
   const page = useHashRoute();
+  const connectionStatus = useDeviceConnection();
   const { state, dispatch } = useWorkspace();
   const [editor, setEditor] = useState(null);
   const nextEditorId = useRef(0);
@@ -42,7 +44,7 @@ export function App() {
 
   return (
     <>
-      <Layout page={page}><Suspense fallback={<div className="page-loading" role="status">화면을 준비하고 있어요.</div>}><Page actions={actions} /></Suspense></Layout>
+      <Layout page={page} connectionStatus={connectionStatus}><Suspense fallback={<div className="page-loading" role="status">화면을 준비하고 있어요.</div>}><Page actions={actions} connectionStatus={connectionStatus} /></Suspense></Layout>
       <Suspense fallback={null}>{editor && <ExpressionEditor key={editor.id} expression={editor.expression} onClose={() => setEditor(null)} onSave={expression => { actions.save(expression); setEditor(null); }} />}</Suspense>
     </>
   );

@@ -33,7 +33,7 @@ JPEG_QUALITY = 70
 
 
 def require_camera_auth(
-    credentials: Annotated[HTTPBasicCredentials | None, Depends(http_basic)],
+        credentials: Annotated[HTTPBasicCredentials | None, Depends(http_basic)],
 ) -> None:
     username = os.getenv("FADO_CAMERA_USER", "")
     password = os.getenv("FADO_CAMERA_PASSWORD", "")
@@ -64,6 +64,8 @@ class CameraStreamService:
         self._stop = threading.Event()
         self._jpeg: bytes | None = None
         self._sequence = 0
+        self._prediction_sequence = 0
+        self._detections: list[dict] = []
         self._clients = 0
         self._last_without_clients = time.monotonic()
         self._error: str | None = None
@@ -105,8 +107,41 @@ class CameraStreamService:
                 "running": bool(self._worker and self._worker.is_alive()),
                 "clients": self._clients,
                 "framesProduced": self._sequence,
+                "predictionsProduced": self._prediction_sequence,
                 "error": self._error,
             }
+
+    def detect_once(self, timeout: float = 30.0) -> dict:
+        # A request must wait for NEW inference, not count the same cached result twice.
+        self.subscribe()
+        try:
+            with self._condition:
+                previous = self._prediction_sequence
+                ready = self._condition.wait_for(
+                    lambda: self._prediction_sequence > previous or self._error is not None,
+                    timeout=timeout,
+                )
+                if self._error is not None:
+                    logger.warning("Camera inference failed: %s", self._error)
+                    raise HTTPException(503, "Camera or expression model is unavailable; check Pi logs")
+                if not ready:
+                    raise HTTPException(504, "Camera inference timed out; model may still be loading")
+                return {
+                    "detections": [dict(item, box=list(item["box"])) for item in self._detections],
+                }
+        finally:
+            self.unsubscribe()
+
+    def _publish_predictions(self, predictions) -> None:
+        detections = [
+            {"className": str(name), "confidence": float(confidence),
+             "box": [int(x1), int(y1), int(x2), int(y2)]}
+            for x1, y1, x2, y2, name, confidence in predictions
+        ]
+        with self._condition:
+            self._detections = detections
+            self._prediction_sequence += 1
+            self._condition.notify_all()
 
     def _capture_loop(self) -> None:
         close_camera = None
@@ -144,6 +179,7 @@ class CameraStreamService:
                 # Reuse the existing two-stage NCNN pipeline; infer every third frame.
                 if frame_count % 3 == 0:
                     predictions = predict_expressions(frame, face_model, expression_model)
+                    self._publish_predictions(predictions)
                 frame_count += 1
 
                 draw_predictions(frame, predictions)
@@ -198,10 +234,15 @@ def camera_status(_: Annotated[None, Depends(require_camera_auth)]):
     return camera_service.status()
 
 
+@router.post("/camera/detect")
+def camera_detect(_: Annotated[None, Depends(require_camera_auth)]):
+    return camera_service.detect_once()
+
+
 @router.get("/camera/stream")
 async def camera_stream(
-    request: Request,
-    _: Annotated[None, Depends(require_camera_auth)],
+        request: Request,
+        _: Annotated[None, Depends(require_camera_auth)],
 ):
     async def generate_frames():
         camera_service.subscribe()
@@ -220,10 +261,10 @@ async def camera_stream(
                     continue
                 last_sequence = seq
                 yield (
-                    b"--frame\r\n"
-                    + b"Content-Type: image/jpeg\r\n"
-                    + f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
-                    + jpeg + b"\r\n"
+                        b"--frame\r\n"
+                        + b"Content-Type: image/jpeg\r\n"
+                        + f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii")
+                        + jpeg + b"\r\n"
                 )
         finally:
             camera_service.unsubscribe()

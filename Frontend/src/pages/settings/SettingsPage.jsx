@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon.jsx';
 import { PageHeading } from '../../components/PageHeading.jsx';
 import { BitmapCanvas } from '../../components/BitmapCanvas.jsx';
+import { DeviceConnectionStatus } from '../../components/DeviceConnectionStatus.jsx';
 import { useWorkspace } from '../../context/WorkspaceContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { useCamera } from '../../hooks/useCamera.js';
@@ -15,13 +16,16 @@ function SettingSwitch({ label, description, enabled, onChange }) {
   return <div className="setting-row separated"><div><strong>{label}</strong><p>{description}</p></div><button className={`toggle ${enabled ? 'on' : ''}`} role="switch" aria-checked={enabled} aria-label={label} onClick={onChange}><span /></button></div>;
 }
 
-export function SettingsPage({ actions }) {
+export function SettingsPage({ actions, connectionStatus }) {
   const { state, dispatch } = useWorkspace();
   const settings = state.settings;
   const [draft, setDraft] = useState(() => ({ deviceName: settings.deviceName, host: settings.host }));
   const notify = useToast();
-  const { camera, cameraPending, toggleCamera } = useCamera();
-  const { detections, detectionPending, detect, live, liveMessage, lastSentId, startLive, stopLive } = useDetection(camera, actions.select);
+  const [cameraSource, setCameraSource] = useState('local');
+  const remoteCamera = cameraSource === 'raspberry';
+  const { camera, cameraPending, toggleCamera, stopCamera } = useCamera();
+  const { detections, detectionPending, detect, live, liveMessage, lastSentId, startLive, stopLive } = useDetection(camera, actions.select, cameraSource);
+  const cameraReady = remoteCamera || Boolean(camera);
   const sentExpression = state.builtins.find(item => item.id === lastSentId);
   const video = useRef(null);
   const updateSettings = patch => dispatch({ type: 'update-settings', patch });
@@ -43,17 +47,24 @@ export function SettingsPage({ actions }) {
     notify('연결 정보를 이 브라우저에 저장했어요.');
   }
 
+  function changeCameraSource(source) {
+    if (source === cameraSource) return;
+    stopLive();
+    stopCamera();
+    setCameraSource(source);
+  }
+
   return (
     <>
       <PageHeading eyebrow="MAKE IT YOURS" title="FaDO와 연결되는 방법" description="내 기기의 연결 정보를 준비하고, 나에게 맞는 화면으로 설정하세요." />
       <div className="settings-grid">
         <section className="card settings-card">
-          <div className="card-header"><h2><Icon name="chip" />기기 연결 정보</h2><span className="neutral-badge"><i className="status-dot muted-dot" />미연결</span></div>
+          <div className="card-header"><h2><Icon name="chip" />기기 연결 정보</h2><DeviceConnectionStatus status={connectionStatus} className="neutral-badge" prefix="" /></div>
           <form id="settings-form" className="settings-body" onSubmit={saveConnection}>
             <div className="info-box"><Icon name="info" /><p>아래 연결 정보는 이 브라우저에 보관됩니다. 카메라 인식 테스트는 Java 백엔드에 연결된 라파 서버를 사용해요.</p></div>
             <label className="field">기기 이름<input name="deviceName" required maxLength={30} value={draft.deviceName} placeholder="나의 FaDO" onChange={event => setDraft(value => ({ ...value, deviceName: event.target.value }))} /></label>
-            <label className="field">Raspberry Pi 서버 주소<input name="host" type="url" value={draft.host} placeholder="http://raspberrypi.local:8000" aria-label="Raspberry Pi 서버 주소" onChange={event => setDraft(value => ({ ...value, host: event.target.value }))} /><span className="field-hint">추후 연결할 API 서버의 전체 주소를 입력해주세요.</span></label>
-            <div className="hardware-spec"><div><span>디스플레이</span><strong>SSD1306 OLED</strong></div><div><span>해상도</span><strong>128 × 64 px</strong></div><div><span>테스트 입력</span><strong>노트북 · 브라우저 카메라</strong></div></div>
+            <label className="field">Raspberry Pi 서버 주소<input name="host" type="url" value={draft.host} placeholder="http://raspberrypi.local:8000" aria-label="Raspberry Pi 서버 주소" onChange={event => setDraft(value => ({ ...value, host: event.target.value }))} /><span className="field-hint">이 주소는 메모용이며, 실제 연결 주소는 백엔드에서 설정해요.</span></label>
+            <div className="hardware-spec"><div><span>디스플레이</span><strong>SSD1306 OLED</strong></div><div><span>해상도</span><strong>128 × 64 px</strong></div><div><span>카메라 입력</span><strong>{remoteCamera ? '라파에 연결된 카메라' : '노트북 · 브라우저 카메라'}</strong></div></div>
             <button className="button button-primary" type="submit"><Icon name="check" />연결 정보 저장</button>
           </form>
         </section>
@@ -69,21 +80,25 @@ export function SettingsPage({ actions }) {
           </section>
           <section className="card camera-card">
             <div className="card-header"><h2><Icon name="camera" />카메라 · OLED 자동 표시</h2><span className="small-badge">{live ? 'AUTO' : 'CAMERA'}</span></div>
+            <div className="camera-source segmented" role="group" aria-label="인식 카메라 선택">
+              <button className={!remoteCamera ? 'active' : ''} aria-pressed={!remoteCamera} onClick={() => changeCameraSource('local')}>노트북 카메라</button>
+              <button className={remoteCamera ? 'active' : ''} aria-pressed={remoteCamera} onClick={() => changeCameraSource('raspberry')}>라파 카메라</button>
+            </div>
             <div className={`camera-view ${camera ? 'has-camera' : ''}`}>
-              <video ref={video} id="camera-video" className={settings.mirror ? 'mirrored' : ''} autoPlay muted playsInline hidden={!camera} aria-label="로컬 카메라 미리보기" />
-              {!camera && <span className="camera-placeholder"><Icon name="camera" /><strong>카메라를 확인해보세요</strong><span>브라우저 카메라 미리보기</span></span>}
+              <video ref={video} id="camera-video" className={settings.mirror ? 'mirrored' : ''} autoPlay muted playsInline hidden={remoteCamera || !camera} aria-label="로컬 카메라 미리보기" />
+              {remoteCamera ? <span className="camera-placeholder"><Icon name="camera" /><strong>라파에 연결된 카메라를 사용해요</strong><span>라파가 촬영·인식하고, 이 화면에는 인식 결과를 보여줘요.</span></span> : !camera && <span className="camera-placeholder"><Icon name="camera" /><strong>카메라를 확인해보세요</strong><span>브라우저 카메라 미리보기</span></span>}
             </div>
             <div className="camera-footer">
-              <p>테스트는 한 장, 자동 표시는 이미지를 반복 전송해요.<br /><span>라파가 표정을 인식하면 해당 표정 PNG를 OLED에 표시해요.</span></p>
+              <p>{remoteCamera ? '인식을 시작하면 라파 카메라에서 촬영해요.' : '테스트는 한 장, 자동 표시는 이미지를 반복 전송해요.'}<br /><span>라파가 표정을 인식하면 해당 표정 PNG를 OLED에 표시해요.</span></p>
               <div className="camera-actions">
-                <button className="button button-secondary" onClick={toggleCamera} disabled={cameraPending}><Icon name={camera ? 'pause' : 'camera'} />{cameraPending ? '요청 중…' : camera ? '카메라 끄기' : '카메라 켜기'}</button>
-                <button className="button button-secondary" onClick={() => detect(video.current)} disabled={!camera || detectionPending || live} aria-busy={detectionPending && !live}><Icon name="scan" />{detectionPending && !live ? '인식 중…' : '카메라 인식 테스트'}</button>
-                <button className="button button-primary" onClick={() => live ? stopLive() : startLive(video.current)} disabled={!camera || (!live && detectionPending)} aria-pressed={live}><Icon name={live ? 'pause' : 'play'} />{live ? 'OLED 자동 표시 중지' : 'OLED 자동 표시 시작'}</button>
+                {!remoteCamera && <button className="button button-secondary" onClick={toggleCamera} disabled={cameraPending}><Icon name={camera ? 'pause' : 'camera'} />{cameraPending ? '요청 중…' : camera ? '카메라 끄기' : '카메라 켜기'}</button>}
+                <button className="button button-secondary" onClick={() => detect(video.current)} disabled={!cameraReady || detectionPending || live} aria-busy={detectionPending && !live}><Icon name="scan" />{detectionPending && !live ? '인식 중…' : '카메라 인식 테스트'}</button>
+                <button className="button button-primary" onClick={() => live ? stopLive() : startLive(video.current)} disabled={!cameraReady || (!live && detectionPending)} aria-pressed={live}><Icon name={live ? 'pause' : 'play'} />{live ? 'OLED 자동 표시 중지' : 'OLED 자동 표시 시작'}</button>
               </div>
             </div>
             <div className="camera-oled-status" role="status" aria-live="polite">
               <strong>{live ? '자동 인식 중' : 'OLED 자동 표시'}</strong>
-              <p>{liveMessage || '카메라를 켜고 자동 표시를 시작해주세요.'}</p>
+              <p>{liveMessage || (remoteCamera ? '자동 표시를 시작하면 라파 카메라의 표정을 OLED로 보내요.' : '카메라를 켜고 자동 표시를 시작해주세요.')}</p>
               {sentExpression && <div className="camera-oled-preview"><BitmapCanvas bitmap={sentExpression.bitmap} color="#ffffff" aria-label={`마지막 전송 PNG: ${sentExpression.name}`} /><span>마지막 전송 성공: {sentExpression.name}</span></div>}
               <p className="detection-note">가장 큰 얼굴 · 신뢰도 {recognitionPolicy.minConfidence * 100}% 이상 · 같은 표정 {recognitionPolicy.confirmations}회 연속<br />표정이 바뀔 때만 OLED에 보내요. 얼굴이 없으면 마지막 표정을 유지해요.</p>
             </div>

@@ -22,7 +22,7 @@ test('the largest face controls the device even when a smaller face has higher c
 
 test('missing, uncertain and unsupported faces interrupt confirmation without inventing a neutral result', () => {
   for (const [detections, reason] of [
-    [[], 'no-face'], [[face('happy', 0.64)], 'low-confidence'],
+    [[], 'no-face'], [[face('happy', recognitionPolicy.minConfidence - 0.01)], 'low-confidence'],
     [[face('love')], 'unsupported'], [[face('person')], 'unsupported'],
     [[face('happy', 0.9, [0, 0, 0, 100])], 'invalid-box'],
     [[face('happy', 0.9, [0, 0, Infinity, 100])], 'invalid-box'],

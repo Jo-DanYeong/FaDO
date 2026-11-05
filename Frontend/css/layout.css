@@ -20,6 +20,7 @@
 .sidebar-device div>span { display: flex; align-items: center; gap: 5px; color: #9da693; font-size: 10px; margin-top: 6px; }
 .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #76946b; flex-shrink: 0; }
 .muted-dot { background: #b6bdb1; }
+.connected-dot { background: #7fbb50; }
 .tiny-link { margin-left: auto; color: #aab5a1; }
 .tiny-link .icon { width: 14px; }
 .sidebar-bottom { margin-top: auto; padding-top: 65px; }
