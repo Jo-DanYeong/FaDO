@@ -1,46 +1,52 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from RPiServer.yolo_api import router as yolo_router
+import re
 from io import BytesIO
 from pathlib import Path
 from threading import Lock
-from fastapi import File, Form, HTTPException, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
-import re
-
+from pydantic import BaseModel
+from RPiServer.camera_stream import router as camera_router
+from RPiServer.yolo_api import router as yolo_router
 from RaspberryPi import ImgTest
 
 app = FastAPI()
 app.include_router(yolo_router)
+app.include_router(camera_router)
 
 EXPRESSION_DIR = Path(__file__).resolve().parent / "expressions"
 expression_lock = Lock()
 MAX_PNG_BYTES = 1024 * 1024
 
+
 class ExpressionRequest(BaseModel):
     expressionId: str
+
 
 @app.get("/health")
 def health():
     return {"Service": "RPiServer", "Status": "UP"}
+
 
 def expression_path(expression_id: str) -> Path:
     if not re.fullmatch(r"[a-zA-Z0-9-]{1,100}", expression_id):
         raise HTTPException(status_code=400, detail="올바르지 않은 표정 ID")
     return EXPRESSION_DIR / f"{expression_id}.png"
 
+
 @app.post("/expression/image")
 def upload_expression_image(
-    expressionId: str = Form(...),
-    name: str = Form(...),
-    file: UploadFile = File(...),
+        expressionId: str = Form(...),
+        name: str = Form(...),
+        file: UploadFile = File(...),
 ):
     target = expression_path(expressionId)
     if not name.strip() or len(name) > 100:
         raise HTTPException(status_code=400, detail="표정 이름을 확인해주세요")
+
     data = file.file.read(MAX_PNG_BYTES + 1)
     if not data or len(data) > MAX_PNG_BYTES:
         raise HTTPException(status_code=413, detail="1MB 이하 PNG가 필요합니다")
+
     try:
         output = BytesIO()
         with Image.open(BytesIO(data)) as raw:
@@ -51,10 +57,13 @@ def upload_expression_image(
         png_bytes = output.getvalue()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as error:
         raise HTTPException(status_code=400, detail="올바르지 않은 PNG") from error
+
     with expression_lock:
         EXPRESSION_DIR.mkdir(parents=True, exist_ok=True)
         target.write_bytes(png_bytes)
+
     return {"expressionId": expressionId, "name": name.strip(), "saved": True}
+
 
 @app.post("/expression")
 def expression(request: ExpressionRequest):
@@ -64,6 +73,7 @@ def expression(request: ExpressionRequest):
             raise HTTPException(status_code=404, detail="저장된 표정 PNG가 없습니다")
         ImgTest.show_image(target)
     return {"expressionId": request.expressionId, "displayed": True}
+
 
 @app.delete("/expression/image", status_code=204)
 def delete_expression_image(expressionId: str):
