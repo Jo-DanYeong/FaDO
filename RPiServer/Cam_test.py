@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Paths
 
 import cv2
 from ultralytics import YOLO

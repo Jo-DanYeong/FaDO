@@ -1,11 +1,3 @@
-"""FaDO Raspberry Pi camera test: NCNN face detection + expression classification.
-
-Examples:
-    python RPiServer/webcam_test.py --camera usb --headless
-    python RPiServer/webcam_test.py --camera csi --headless
-    python RPiServer/webcam_test.py --camera usb --snapshot /tmp/fado_preview.jpg
-"""
-
 import argparse
 import os
 import time
