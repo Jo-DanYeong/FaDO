@@ -64,17 +64,25 @@ test('reducer changes state without mutating earlier React state', () => {
   assert.equal(state.custom.length, 1);
 });
 
-test('demo selection is temporary and manual selection stops playback', () => {
-  const neutral = { ...builtin, id: 'neutral' };
-  let state = createInitialWorkspace(readWorkspace(memoryStorage(null)), [builtin, neutral]);
-  state = workspaceReducer(state, { type: 'toggle-demo' });
-  state = workspaceReducer(state, { type: 'demo-tick' });
-  assert.equal(state.selected, 'neutral');
-  assert.equal(state.persistedSelected, 'happy');
-  state = workspaceReducer(state, { type: 'select', id: 'neutral' });
-  assert.equal(state.playing, false);
-  assert.equal(state.mode, 'manual');
-  assert.equal(state.persistedSelected, 'neutral');
+test('preset edits survive reload without replacing original metadata, and restore removes the saved override', () => {
+  const original = { ...builtin, key: '1', color: 'green' };
+  const storage = memoryStorage(null);
+  const initial = createInitialWorkspace(readWorkspace(storage), [original]);
+  const edited = workspaceReducer(initial, { type: 'save-expression', expression: {
+    id: 'happy', name: '나의 웃음', bitmap: Array(8192).fill(1),
+  } });
+  assert.equal(saveWorkspace(edited, storage), true);
+  const reloaded = createInitialWorkspace(readWorkspace(storage), [original]);
+  assert.equal(reloaded.builtins[0].name, '나의 웃음');
+  assert.equal(reloaded.builtins[0].bitmap[0], 1);
+  assert.equal(reloaded.builtins[0].key, '1');
+  assert.equal(reloaded.builtins[0].modified, true);
+  assert.equal(reloaded.custom.length, 0);
+  assert.equal(reloaded.originalBuiltins[0].bitmap[0], 0);
+  const restored = workspaceReducer(reloaded, { type: 'restore-preset', id: 'happy' });
+  assert.equal(getSelectedExpression(restored), original);
+  assert.equal(saveWorkspace(restored, storage), true);
+  assert.equal(JSON.parse(storage.getItem(STORAGE_KEY)).presetEdits, undefined);
 });
 
 test('storage quota errors are reported without throwing', () => {

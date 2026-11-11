@@ -5,7 +5,9 @@ import { WIDTH, HEIGHT } from '../../utils/bitmap.js';
 import { createExpressionId } from '../../utils/id.js';
 import { createEditorModel } from './model.js';
 
-export function ExpressionEditor({ expression, onSave, onClose }) {
+export function ExpressionEditor({ mode, expression, onSave, onClose }) {
+  const editing = mode === 'edit';
+  const editingPreset = editing && !expression.custom;
   const [model] = useState(() => createEditorModel(expression?.bitmap));
   const [revision, refresh] = useReducer(value => value + 1, 0);
   const [tool, setTool] = useState('pencil');
@@ -83,16 +85,16 @@ export function ExpressionEditor({ expression, onSave, onClose }) {
     event.preventDefault();
     if (!name.trim()) { setError('표정 이름을 입력해주세요.'); return; }
     if (model.isEmpty()) { setError('표정을 먼저 그려주세요.'); return; }
-    onSave({
-      id: expression?.custom ? expression.id : createExpressionId(),
-      name: name.trim(), bitmap: model.snapshot(), english: 'Custom', color: 'green', custom: true, note: '내가 만든 작은 표정',
+    const changes = { name: name.trim(), bitmap: model.snapshot() };
+    onSave(editing ? { ...expression, ...changes } : {
+      ...changes, id: createExpressionId(), english: 'Custom', color: 'green', custom: true, note: '내가 만든 작은 표정',
     });
   }
 
   return (
     <dialog ref={dialog} id="editor-dialog" className="editor-dialog" aria-labelledby="editor-title" onCancel={event => { event.preventDefault(); onClose(); }}>
       <form id="expression-form" onSubmit={submit}>
-        <div className="dialog-heading"><div><span className="eyebrow">A LITTLE FACE, MADE BY YOU</span><h2 id="editor-title">{expression?.custom ? '표정 편집하기' : '나만의 표정 만들기'}</h2><p>픽셀 하나에 마음을 담아보세요.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="편집기 닫기"><Icon name="close" /></button></div>
+        <div className="dialog-heading"><div><span className="eyebrow">A LITTLE FACE, MADE BY YOU</span><h2 id="editor-title">{editingPreset ? '기본 표정 수정' : editing ? '내 표정 수정' : '새 표정 추가'}</h2><p>{editingPreset ? '이 기본 표정의 그림과 이름을 변경해요.' : '픽셀 하나에 마음을 담아보세요.'}</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="편집기 닫기"><Icon name="close" /></button></div>
         <div className="editor-body">
           <div className="editor-toolbar">
             <div className="tool-group">
@@ -108,9 +110,9 @@ export function ExpressionEditor({ expression, onSave, onClose }) {
           <div className="canvas-caption"><span><i className="status-dot" />128 × 64 px <span className="muted">· SSD1306</span></span><span>드래그해서 그려보세요</span></div>
           <div className="editor-fields"><label className="field">표정 이름 <input id="expression-name" maxLength={20} placeholder="예: 윙크하는 FaDO" required autoComplete="off" value={name} onChange={event => { setName(event.target.value); setError(''); }} /></label><div className="mini-preview"><span>OLED 미리보기</span><div><BitmapCanvas id="editor-preview" bitmap={preview} /></div></div></div>
           {error && <p className="editor-error" role="alert">{error}</p>}
-          <p className="editor-hint"><Icon name="info" />저장하면 브라우저에 보관하고 서버에도 자동으로 저장해요.</p>
+          <p className="editor-hint"><Icon name="info" />{editingPreset ? '수정본은 수동 선택과 자동 인식에 적용돼요. 라이브러리에서 원본으로 복원할 수 있어요.' : '저장하면 브라우저에 보관하고 서버에도 자동으로 저장해요.'}</p>
         </div>
-        <div className="dialog-footer"><button type="button" className="button button-secondary" onClick={onClose}>취소</button><button type="submit" className="button button-primary"><Icon name="check" />표정 저장하기</button></div>
+        <div className="dialog-footer"><button type="button" className="button button-secondary" onClick={onClose}>취소</button><button type="submit" className="button button-primary"><Icon name="check" />{editing ? '수정 저장' : '표정 추가'}</button></div>
       </form>
     </dialog>
   );

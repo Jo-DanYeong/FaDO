@@ -7,9 +7,8 @@ export const defaultSettings = {
   confidence: true,
 };
 
-function isExpression(item) {
+function hasExpressionData(item) {
   return typeof item?.id === 'string'
-    && item.id.startsWith('custom-')
     && typeof item.name === 'string'
     && Array.isArray(item.bitmap)
     && item.bitmap.length === 8192
@@ -30,7 +29,7 @@ export function readWorkspace(storage = localStorage) {
     return {
       settings,
       selected: typeof data.selected === 'string' ? data.selected : 'happy',
-      custom: Array.isArray(data.custom) ? data.custom.filter(isExpression).map(item => ({
+      custom: Array.isArray(data.custom) ? data.custom.filter(item => hasExpressionData(item) && item.id.startsWith('custom-')).map(item => ({
         id: item.id,
         name: item.name.slice(0, 20),
         bitmap: item.bitmap,
@@ -39,18 +38,23 @@ export function readWorkspace(storage = localStorage) {
         note: '내가 만든 작은 표정',
         custom: true,
       })) : [],
+      presetEdits: Array.isArray(data.presetEdits) ? data.presetEdits.filter(item => hasExpressionData(item) && item.name.trim()).map(({ id, name, bitmap }) => ({
+        id, name: name.trim().slice(0, 20), bitmap,
+      })) : [],
     };
   } catch {
-    return { settings: { ...defaultSettings }, custom: [], selected: 'happy' };
+    return { settings: { ...defaultSettings }, custom: [], presetEdits: [], selected: 'happy' };
   }
 }
 
 export function saveWorkspace(state, storage = localStorage) {
   try {
+    const presetEdits = state.builtins?.filter(item => item.modified).map(({ id, name, bitmap }) => ({ id, name, bitmap }));
     storage.setItem(STORAGE_KEY, JSON.stringify({
       settings: state.settings,
       custom: state.custom,
       selected: state.selected,
+      ...(presetEdits?.length ? { presetEdits } : {}),
     }));
     return true;
   } catch {

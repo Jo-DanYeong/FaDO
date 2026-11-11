@@ -34,7 +34,7 @@ export function useDetection(camera, selectExpression, source = 'local') {
     cancel();
     setLive(false);
     setPending(false);
-    setLiveMessage('자동 표시를 중지했어요. 마지막 OLED 표정은 유지돼요.');
+    setLiveMessage('자동 표시를 중지했어요.');
   }, [cancel]);
 
   useEffect(() => {

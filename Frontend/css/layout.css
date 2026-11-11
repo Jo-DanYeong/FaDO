@@ -41,9 +41,6 @@
 .breadcrumb-parent { color: #99a28f; font-weight: 400; }
 .breadcrumb-arrow { width: 11px; height: 11px; color: #b4bcaf; }
 .topbar-right { display: flex; align-items: center; gap: 18px; }
-.demo-badge { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #899276; }
-.demo-badge .status-dot { width: 5px; height: 5px; background: #8c9e73; }
-.topbar-divider { height: 17px; width: 1px; background: var(--line); }
 .icon-button { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: transparent; color: #8e9b83; border-radius: 6px; transition: background .15s; }
 .icon-button:hover { background: #f0f3eb; color: var(--green); }
 .icon-button .icon { width: 17px; height: 17px; }

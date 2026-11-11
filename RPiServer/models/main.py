@@ -3,7 +3,7 @@ from PIL import Image
 from ultralytics import YOLO
 
 # 모델 로딩
-model = YOLO("yolo26n.pt")
+model = YOLO("face_detector.pt")
 
 # 테스트 이미지 생성
 image = Image.new("RGB", (320, 320), "white")

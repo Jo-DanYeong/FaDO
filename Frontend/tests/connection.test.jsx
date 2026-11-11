@@ -15,7 +15,7 @@ const originalSetTimeout = globalThis.setTimeout;
 const originalClearTimeout = globalThis.clearTimeout;
 let root;
 let timers;
-const healthy = () => new Response(JSON.stringify({ Service: 'RPiServer', Status: 'UP' }));
+const healthy = () => Response.json({ deviceName: 'RaspberryPi', status: 'UP' });
 
 beforeEach(() => {
   timers = new Map();
@@ -67,12 +67,22 @@ test('health checks use the Java Raspberry endpoint without caching and accept t
   assert.equal(request.signal, controller.signal);
 });
 
+test('health checks recognize the Pi while the Java DTO update is being rolled out', async () => {
+  const piHealth = { Service: 'RPiServer', Status: 'UP' };
+  for (const body of [piHealth, { deviceName: 'RaspberryPi', status: JSON.stringify(piHealth) }]) {
+    globalThis.fetch = async () => Response.json(body);
+    assert.equal(await checkDeviceConnection(), true);
+  }
+});
+
 test('HTTP 200 alone cannot mark the Pi connected; non-UP, other services and malformed responses fail', async () => {
-  for (const result of [null, {}, { Service: 'RPiServer', Status: 'DOWN' }, { Service: 'Java', Status: 'UP' }]) {
+  for (const result of [null, {}, { deviceName: 'RaspberryPi', status: 'DOWN' }, { deviceName: 'Java', status: 'UP' },
+    { deviceName: 'RaspberryPi', status: '라즈베리파이 서버 연결 실패' },
+    { deviceName: 'RaspberryPi', status: '{"Service":"Other","Status":"UP"}' }]) {
     globalThis.fetch = async () => new Response(JSON.stringify(result));
     assert.equal(await checkDeviceConnection(), false);
   }
-  globalThis.fetch = async () => new Response(null, { status: 503 });
+  globalThis.fetch = async () => Response.json({ deviceName: 'RaspberryPi', status: 'DOWN' }, { status: 503 });
   assert.equal(await checkDeviceConnection(), false);
   globalThis.fetch = async () => new Response('<html>proxy fallback</html>');
   await assert.rejects(checkDeviceConnection());

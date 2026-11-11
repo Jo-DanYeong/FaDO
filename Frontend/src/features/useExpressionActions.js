@@ -33,7 +33,6 @@ export function useExpressionActions(openEditor) {
     const expression = expressions.get(id);
     if (!expression || pendingDelete.current === id || signal?.aborted) return Promise.resolve(false);
     const saveVersion = localSaveVersion.current;
-    dispatch({ type: 'stop-demo' });
     return enqueue(async () => {
       if (signal?.aborted) return false;
       setUploadingId(id);
@@ -55,33 +54,54 @@ export function useExpressionActions(openEditor) {
     });
   }, [expressions, enqueue, dispatch, notify]);
 
+  function persist(expression, { applyToOled = false, successMessage = '표정을 저장했어요.' } = {}) {
+    return enqueue(async () => {
+      setUploadingId(expression.id);
+      let uploaded = false;
+      try {
+        await uploadExpressionPng(expression);
+        uploaded = true;
+        if (!active.current) return false;
+        if (applyToOled) await sendExpression(expression.id);
+        if (active.current) notify(successMessage);
+        return true;
+      } catch (error) {
+        if (active.current) {
+          const reason = uploaded ? 'OLED에 표시하지 못했어요.' : '표정을 서버에 저장하지 못했어요.';
+          notify(`${reason} 표정을 다시 선택해주세요. (${error.message || '연결 오류'})`);
+        }
+        return false;
+      } finally {
+        if (active.current) setUploadingId(null);
+      }
+    });
+  }
+
   return {
     select,
     uploadingId,
     deletingId,
+    create() {
+      openEditor({ mode: 'create' });
+    },
     edit(id) {
-      const expression = id ? find(id) : undefined;
-      if (id && !expression) return;
-      dispatch({ type: 'stop-demo' });
-      openEditor(expression);
+      const expression = find(id);
+      if (!expression || pendingDelete.current === id) return;
+      openEditor({ mode: 'edit', expression });
     },
     save(expression) {
       // Keep the drawing locally even when the backend is unavailable.
       localSaveVersion.current += 1;
       dispatch({ type: 'save-expression', expression });
-      return enqueue(async () => {
-        setUploadingId(expression.id);
-        try {
-          await uploadExpressionPng(expression);
-          if (active.current) notify('표정을 저장했어요.');
-          return true;
-        } catch (error) {
-          if (active.current) notify(`표정을 서버에 저장하지 못했어요. 다시 저장하거나 선택해주세요. (${error.message || '연결 오류'})`);
-          return false;
-        } finally {
-          if (active.current) setUploadingId(null);
-        }
-      });
+      return expression.custom ? persist(expression)
+        : persist(expression, { applyToOled: true, successMessage: '수정한 기본 표정을 OLED에 적용했어요.' });
+    },
+    restorePreset(id) {
+      const original = state.originalBuiltins.find(item => item.id === id);
+      if (!original || !find(id)?.modified) return;
+      localSaveVersion.current += 1;
+      dispatch({ type: 'restore-preset', id });
+      return persist(original, { applyToOled: true, successMessage: '기본 표정을 원본으로 복원했어요.' });
     },
     remove(id) {
       if (pendingDelete.current) return;

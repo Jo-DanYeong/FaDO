@@ -1,30 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDemo } from '../src/services/demo.js';
 import { createCamera } from '../src/services/camera.js';
-
-test('demo cannot create duplicate timers and can restart after stopping', () => {
-  let created = 0;
-  let cleared = 0;
-  let ticks = 0;
-  const demo = createDemo(() => { ticks += 1; }, {
-    setInterval(callback, delay) {
-      assert.equal(delay, 2800);
-      callback();
-      return created++;
-    },
-    clearInterval() { cleared += 1; },
-  });
-  demo.start();
-  demo.start();
-  assert.equal(ticks, 1);
-  demo.stop();
-  demo.stop();
-  demo.start();
-  demo.stop();
-  assert.equal(created, 2);
-  assert.equal(cleared, 2);
-});
 
 test('leaving a page while permission is pending stops a late camera stream', async () => {
   let resolve;

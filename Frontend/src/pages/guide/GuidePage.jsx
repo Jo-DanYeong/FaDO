@@ -9,8 +9,8 @@ export function GuidePage({ actions }) {
   const happy = state.builtins.find(item => item.id === 'happy');
   const go = page => { window.location.hash = page; };
   const steps = [
-    { number: '01', icon: 'studio', title: '표정을 만나보세요', text: '라이브 스튜디오에서 여섯 가지 기본 표정을 눌러보세요. 키보드 1~6으로도 빠르게 바꿀 수 있어요.', label: '스튜디오로 가기', action: () => go('studio') },
-    { number: '02', icon: 'pencil', title: '나만의 마음을 그려요', text: '새 표정 만들기를 열어 128 × 64 픽셀 캔버스에 그려보세요. 지우개와 되돌리기로 자유롭게 수정할 수 있어요.', label: '첫 표정 그리기', action: () => actions.edit() },
+    { number: '01', icon: 'studio', title: '카메라로 표정을 인식해요', text: '라이브 스튜디오에서 노트북이나 라파 카메라를 선택하고 OLED 자동 표시를 시작하세요.', label: '스튜디오로 가기', action: () => go('studio') },
+    { number: '02', icon: 'pencil', title: '나만의 마음을 그려요', text: '새 표정 만들기를 열어 128 × 64 픽셀 캔버스에 그려보세요. 지우개와 되돌리기로 자유롭게 수정할 수 있어요.', label: '첫 표정 그리기', action: () => actions.create() },
     { number: '03', icon: 'chip', title: '하드웨어 연결을 준비해요', text: '기기 이름과 Raspberry Pi 서버 주소를 저장하세요. 실제 표정 인식과 OLED 전송은 별도의 백엔드 연결이 필요해요.', label: '연결 설정 열기', action: () => go('settings') },
   ];
   return (
@@ -20,7 +20,7 @@ export function GuidePage({ actions }) {
       <div className="guide-steps">{steps.map(step => <article key={step.number} className="card guide-step"><div className="guide-step-top"><span className="stat-icon green"><Icon name={step.icon} /></span><span>{step.number}</span></div><h3>{step.title}</h3><p>{step.text}</p><button className="text-link" onClick={step.action}>{step.label}<Icon name="arrow" /></button></article>)}</div>
       <section className="card guide-faq">
         <h2>시작하기 전에 알아두세요</h2>
-        <details open><summary>지금 사용할 수 있는 기능은 무엇인가요?</summary><p>표정 수동 선택, 자동 데모, 픽셀 편집·저장·삭제, JSON 내보내기, PNG 저장, 노트북 카메라 미리보기와 서버 인식 테스트를 사용할 수 있어요. 인식 테스트는 버튼을 누를 때 이미지 한 장을 서버로 보내요. 표정 분류와 OLED 출력에는 연결된 모델과 백엔드 구현이 필요합니다.</p></details>
+        <details open><summary>카메라 표정을 OLED에 어떻게 표시하나요?</summary><p>스튜디오에서 카메라를 고르고 OLED 자동 표시를 시작하세요. 인식한 표정을 기기로 보낸 뒤 미리보기를 갱신해요. 인식 테스트는 결과만 보여줘요. 기본 표정을 직접 고르거나 키보드 1~6을 누르면 자동 표시를 중지하고 선택한 표정을 보내요.</p></details>
         <details><summary>저장한 표정은 어디에 보관되나요?</summary><p>이 브라우저의 로컬 저장소에 보관돼요. 다른 기기와 동기화되지 않으며 브라우저 데이터를 삭제하면 사라집니다. 중요한 표정은 라이브러리에서 JSON으로 내보내 보관해주세요.</p></details>
         <details><summary>픽셀 편집기를 키보드로 사용할 수 있나요?</summary><p>픽셀 캔버스에 초점을 맞춘 후 방향키로 이동하고 Space 키로 그릴 수 있어요. Tab 키로 브러시와 지우개, 되돌리기 등 도구에 이동할 수 있습니다.</p></details>
       </section>

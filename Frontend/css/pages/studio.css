@@ -19,7 +19,7 @@
 .outline-label { font-size: 8px; letter-spacing: .5px; padding: 4px 6px; border: 1px solid #e7ebdf; color: #9ca58e; border-radius: 4px; margin-left: auto; }
 .stat-arrow { margin-left: auto; color: #9ea990; }
 .stat-arrow .icon { width: 17px; height: 17px; }
-.studio-grid { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(290px,1fr); gap: 23px; }
+.studio-grid { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(290px,1fr); align-items: start; gap: 23px; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: 0 2px 3px #263a2301; }
 .card-header { min-height: 58px; display: flex; align-items: center; justify-content: space-between; padding: 0 23px; border-bottom: 1px solid #eff1eb; }
 .card-header h2 { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
@@ -42,7 +42,7 @@
 .expression-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 500; padding: 6px 9px; border-radius: 5px; }
 .expression-chip .status-dot { width: 4px; height: 4px; background: currentColor; }
 .stage-label { font-size: 8px; letter-spacing: 1.8px; color: #9dac8a; font-weight: 550; }
-.preview-controls { min-height: 70px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.preview-controls { min-height: 70px; padding: 16px 20px; display: flex; align-items: center; justify-content: flex-end; }
 .segmented { display: inline-flex; padding: 3px; gap: 1px; background: #f4f6f1; border: 1px solid #edf0e7; border-radius: 7px; }
 .segmented button { background: transparent; color: #97a38a; font-size: 10px; padding: 7px 11px; border-radius: 4px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .segmented button .icon { width: 12px; height: 12px; }
@@ -52,31 +52,3 @@
 .brightness-control input { width: 68px; height: 3px; }
 .brightness-control span { font-size: 9px; width: 29px; color: #98a48b; font-variant-numeric: tabular-nums; }
 .small-badge { font-size: 8px; font-weight: 550; letter-spacing: 1px; color: #95a184; border: 1px solid #e8eddf; background: #f8faf5; padding: 4px 7px; border-radius: 4px; }
-.recognition-body { padding: 23px 23px 17px; }
-.recognition-top { display: flex; align-items: center; gap: 17px; margin-bottom: 23px; }
-.emotion-orb { width: 79px; height: 79px; border-radius: 50%; position: relative; flex-shrink: 0; display: grid; place-items: center; }
-.emotion-orb canvas { width: 88%; height: 50%; }
-.orb-spark { position: absolute; color: #b3c39f; }
-.spark-one { right: -8px; top: 1px; font-size: 19px; }.spark-two { left: -2px; bottom: -4px; font-size: 13px; }
-.recognition-emotion>span:first-child { display: block; font-size: 10px; color: #95a187; }
-.recognition-emotion { min-width: 0; }
-.recognition-emotion h3 { font-size: 25px; letter-spacing: -.8px; font-weight: 650; margin: 7px 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.emotion-period { color: #8dab76; }
-.recognition-caption { font-size: 9px; color: #a1ae92; }
-.probability-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-.probability-heading>span:first-child { font-size: 10px; color: #818e76; }
-.probability-heading .muted { font-size: 8px; margin-left: 3px; color: #a9b49a; }
-.confidence-value { font-size: 17px; font-weight: 600; color: #7d9b68; letter-spacing: -.6px; }
-.confidence-value small { font-size: 10px; margin-left: 1px; font-weight: 400; }
-.probability-row { display: flex; align-items: center; gap: 13px; margin-bottom: 12px; }
-.probability-row>span:first-child { width: 47px; font-size: 10px; color: #95a288; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.probability-track { flex: 1; background: #f1f4eb; height: 5px; border-radius: 3px; overflow: hidden; }
-.probability-fill { height: 100%; min-width: 3px; background: #d4ddc7; border-radius: 3px; transition: width .25s; }
-.probability-fill.primary { background: #a3ba8b; }
-.probability-value { font-size: 9px; color: #99a78b; width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
-.probability-row:first-child>span:first-child { color: #6b855c; }
-.recognition-divider { height: 1px; background: #edf1e7; margin: 19px 0 15px; }
-.demo-play { width: 100%; min-height: 38px; font-size: 11px; background: #638154; border-color: #638154; }
-.demo-play .icon { width: 13px; height: 13px; }
-.recognition-note { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9px; color: #9ba98a; margin-top: 12px; white-space: nowrap; }
-.recognition-note .icon { width: 12px; height: 12px; }

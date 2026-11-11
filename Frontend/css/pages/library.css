@@ -16,8 +16,10 @@
 .library-grid .expression-info strong { font-size: 14px; }
 .library-grid .expression-info>span { font-size: 10px; }
 .expression-note { display: block; font-size: 11px; color: #98a78c; margin-top: 8px; }
-.expression-actions { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #f0f2eb; margin: 0 17px; padding: 10px 0; }
-.expression-actions>div { display: flex; gap: 3px; }
+.expression-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; border-top: 1px solid #f0f2eb; margin: 0 17px; padding: 10px 0; }
+.expression-actions>div { display: flex; align-items: center; gap: 3px; }
+.expression-command { background: transparent; color: #526a55; font-size: 10px; padding: 4px 5px; border-radius: 5px; white-space: nowrap; min-height: 26px; }
+.expression-command:hover { background: #f1f4ec; }
 .preset-tag { font-size: 9px; color: #93a385; background: #f5f7f0; padding: 4px 7px; border-radius: 4px; }
 .expression-actions .icon-button .icon { width: 15px; height: 15px; }
 .danger:hover { color: #b16c62; background: #fcf0ed; }

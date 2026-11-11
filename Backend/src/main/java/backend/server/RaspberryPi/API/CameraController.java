@@ -23,8 +23,8 @@ public class CameraController {
 
     public CameraController(
             @Value("${Raspberry.base-url}") String baseUrl,
-            @Value("${Raspberry.camera-user:}") String username,
-            @Value("${Raspberry.camera-password:}") String password) {
+            @Value("${Raspberry.camera-user}") String username,
+            @Value("${Raspberry.camera-password}") String password) {
         credentialsConfigured = !username.isBlank() && !password.isBlank();
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)

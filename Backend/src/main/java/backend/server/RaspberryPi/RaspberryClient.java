@@ -2,8 +2,10 @@ package backend.server.RaspberryPi;
 
 import backend.server.RaspberryPi.DTO.DetectionResponse;
 import backend.server.RaspberryPi.DTO.SelectExpressionRequest;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.netty.channel.ChannelOption;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.codec.CodecException;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class RaspberryClient {
@@ -71,12 +74,26 @@ public class RaspberryClient {
     }
 
     public String health() {
-        return client.get()
+        PiHealth result = client.get()
                 .uri("/health")
                 .retrieve()
-                .bodyToMono(String.class)
+                .bodyToMono(PiHealth.class)
+                .timeout(Duration.ofSeconds(2))
+                .onErrorMap(
+                        e -> e instanceof WebClientException || e instanceof TimeoutException || e instanceof CodecException,
+                        e -> new ResponseStatusException(
+                                HttpStatus.SERVICE_UNAVAILABLE,
+                                "라즈베리파이에 연결할 수 없습니다.", e)
+                )
                 .block();
+        if (result == null || !"RPiServer".equals(result.service()) || !"UP".equals(result.status())) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "라즈베리파이 상태를 확인할 수 없습니다.");
+        }
+        return result.status();
     }
+
+    private record PiHealth(@JsonProperty("Service") String service, @JsonProperty("Status") String status) {}
 
     public void sendExpression(SelectExpressionRequest request) {
         client.post()
@@ -85,6 +102,13 @@ public class RaspberryClient {
                 .bodyValue(request)
                 .retrieve()
                 .toBodilessEntity()
+                .timeout(Duration.ofSeconds(4))
+                .onErrorMap(
+                        e -> e instanceof WebClientException || e instanceof TimeoutException,
+                        e -> new ResponseStatusException(
+                                HttpStatus.SERVICE_UNAVAILABLE,
+                                "표정을 전달할 수 없습니다.")
+                )
                 .block();
     }
 

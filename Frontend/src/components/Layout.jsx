@@ -62,7 +62,6 @@ export function Layout({ page, children, connectionStatus }) {
               <span className="breadcrumb-parent">워크스페이스</span><Icon name="chevron" className="breadcrumb-arrow" /><span>{pageLabels[page]}</span>
             </div>
             <div className="topbar-right">
-              <span className="demo-badge"><i className="status-dot" />프론트엔드 데모</span><span className="topbar-divider" />
               <button className="icon-button" onClick={() => { window.location.hash = 'guide'; }} aria-label="사용 가이드"><Icon name="help" /></button>
               <span className="topbar-avatar" aria-label="개인 워크스페이스">F</span>
             </div>

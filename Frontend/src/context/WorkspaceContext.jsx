@@ -14,13 +14,13 @@ function initialize() {
 export function WorkspaceProvider({ children, initialState }) {
   const [state, dispatch] = useReducer(workspaceReducer, initialState, value => value || initialize());
   const notify = useToast();
-  const { settings, custom, persistedSelected } = state;
+  const { settings, custom, builtins, persistedSelected } = state;
 
   useEffect(() => {
-    if (!saveWorkspace({ settings, custom, selected: persistedSelected })) {
+    if (!saveWorkspace({ settings, custom, builtins, selected: persistedSelected })) {
       notify('브라우저 저장 공간이 부족합니다. 표정을 JSON으로 내보내주세요.');
     }
-  }, [settings, custom, persistedSelected, notify]);
+  }, [settings, custom, builtins, persistedSelected, notify]);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
