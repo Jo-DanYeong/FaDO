@@ -96,17 +96,26 @@ public class RaspberryClient {
     private record PiHealth(@JsonProperty("Service") String service, @JsonProperty("Status") String status) {}
 
     public void sendExpression(SelectExpressionRequest request) {
-        client.post()
+        completeExpressionRequest(client.post()
                 .uri("/expression")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
+                .bodyValue(request));
+    }
+
+    public void renewExpressionHold(String holdToken) {
+        completeExpressionRequest(client.post().uri("/expression/hold/{holdToken}", holdToken));
+    }
+
+    private void completeExpressionRequest(WebClient.RequestHeadersSpec<?> request) {
+        request
                 .retrieve()
                 .toBodilessEntity()
                 .timeout(Duration.ofSeconds(4))
                 .onErrorMap(
                         e -> e instanceof WebClientException || e instanceof TimeoutException,
                         e -> new ResponseStatusException(
-                                HttpStatus.SERVICE_UNAVAILABLE,
+                                e instanceof WebClientResponseException response && response.getStatusCode().value() == 409
+                                        ? HttpStatus.CONFLICT : HttpStatus.SERVICE_UNAVAILABLE,
                                 "표정을 전달할 수 없습니다.")
                 )
                 .block();

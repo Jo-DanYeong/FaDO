@@ -640,10 +640,10 @@ test('camera readiness errors do not submit a frame or leave the test button pen
 });
 
 // Drive only the recognition delay; React and toast timers retain their real behavior.
-function recognitionClock() {
+function recognitionClock(delayMs = 750) {
   const timers = new Map();
   globalThis.setTimeout = (callback, delay, ...args) => {
-    if (delay !== 750) return originalSetTimeout(callback, delay, ...args);
+    if (delay !== delayMs) return originalSetTimeout(callback, delay, ...args);
     const id = {};
     timers.set(id, callback);
     return id;
@@ -697,6 +697,71 @@ test('the connected studio starts the Pi camera with neutral and returns to neut
   assert.equal(document.querySelector('.large-face').getAttribute('aria-label'), '현재 표정: 평온해요');
   await click(button('OLED 자동 표시 중지'));
   assert.equal(clock.size, 0);
+});
+
+test('stopping OLED auto display survives navigation until it is explicitly started again', async () => {
+  const clock = recognitionClock();
+  healthFetch = async () => Response.json({ deviceName: 'RaspberryPi', status: 'UP' });
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return url.endsWith('/camera/detect')
+      ? Response.json({ detections: [] })
+      : new Response(null, { status: 204 });
+  };
+
+  await mount();
+  await click(button('OLED 자동 표시 중지'));
+  assert.equal(clock.size, 0);
+  const requestCount = requests.length;
+  await navigate('library');
+  await navigate('studio');
+  assert.equal(button('OLED 자동 표시 시작').disabled, false);
+  await navigate('settings');
+  await navigate('studio');
+  assert.equal(button('OLED 자동 표시 시작').disabled, false);
+  assert.equal(requests.length, requestCount);
+  assert.equal(clock.size, 0);
+
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(clock.size, 1);
+  await navigate('settings');
+  assert.equal(clock.size, 0);
+  await navigate('studio');
+  assert.equal(button('OLED 자동 표시 중지').disabled, false);
+  assert.equal(clock.size, 1);
+});
+
+test('a library selection renews its OLED hold across navigation until automatic display starts', async () => {
+  const clock = recognitionClock(4000);
+  healthFetch = async () => Response.json({ deviceName: 'RaspberryPi', status: 'UP' });
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, ...options });
+    return url.endsWith('/camera/detect')
+      ? Response.json({ detections: [] })
+      : new Response(null, { status: 204 });
+  };
+
+  await mount('library');
+  await click(button('슬퍼요 표정 선택'));
+  const selection = JSON.parse(requests.find(item => item.url === '/api/v1/expression').body);
+  assert.equal(selection.expressionId, 'sad');
+  assert.ok(selection.holdToken);
+  await clock.next();
+  await navigate('studio');
+  assert.equal(button('OLED 자동 표시 시작').disabled, false);
+  assert.equal(document.querySelector('.large-face').getAttribute('aria-label'), '현재 표정: 슬퍼요');
+  await clock.next();
+  await clock.next();
+  const holdUrl = `/api/v1/expression/hold/${selection.holdToken}`;
+  assert.deepEqual(requests.map(item => item.url), [
+    '/api/v1/expression/image', '/api/v1/expression', holdUrl, holdUrl, holdUrl,
+  ]);
+
+  await click(button('OLED 자동 표시 시작'));
+  assert.equal(clock.size, 0);
+  assert.deepEqual(JSON.parse(requests.findLast(item => item.url === '/api/v1/expression').body), {
+    expressionId: 'neutral',
+  });
 });
 
 test('laptop detection resumes automatically when a frame arrives without a media readiness event', async () => {

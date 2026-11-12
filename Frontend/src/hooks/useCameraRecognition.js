@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { useWorkspace } from '../context/WorkspaceContext.jsx';
 import { useCamera } from './useCamera.js';
 import { useDetection } from './useDetection.js';
 
 export function useCameraRecognition(selectExpression, autoStart = false) {
+  const { autoDisplayEnabled, setAutoDisplayEnabled, setManualDisplayHold } = useWorkspace();
+  const shouldAutoStart = autoStart && autoDisplayEnabled;
   const { camera, cameraPending, toggleCamera, stopCamera } = useCamera();
   const remoteCamera = !camera;
   const detection = useDetection(camera, selectExpression, remoteCamera ? 'raspberry' : 'local');
@@ -13,16 +16,18 @@ export function useCameraRecognition(selectExpression, autoStart = false) {
   const startLive = useCallback(() => {
     autoStartHandled.current = true;
     if (camera || pendingStart.current === 'raspberry') pendingStart.current = null;
+    setManualDisplayHold(null);
     start(video.current, true);
-  }, [camera, start]);
+  }, [camera, setManualDisplayHold, start]);
   const stopLive = useCallback(() => {
     autoStartHandled.current = true;
     pendingStart.current = null;
+    setAutoDisplayEnabled(false);
     stopDetection();
-  }, [stopDetection]);
+  }, [setAutoDisplayEnabled, stopDetection]);
   const switchToRaspberryCamera = useCallback(() => {
     if (camera) {
-      pendingStart.current = autoStart || live || pendingStart.current === 'local' ? 'raspberry' : null;
+      pendingStart.current = shouldAutoStart || live || pendingStart.current === 'local' ? 'raspberry' : null;
       stopDetection();
     } else if (cameraPending) {
       pendingStart.current = null;
@@ -30,7 +35,7 @@ export function useCameraRecognition(selectExpression, autoStart = false) {
       return;
     }
     stopCamera();
-  }, [autoStart, camera, cameraPending, live, stopCamera, stopDetection]);
+  }, [shouldAutoStart, camera, cameraPending, live, stopCamera, stopDetection]);
 
   useEffect(() => {
     const element = video.current;
@@ -51,11 +56,11 @@ export function useCameraRecognition(selectExpression, autoStart = false) {
       if (!active) return;
       const shouldStart = camera
         ? pendingStart.current === 'local'
-        : pendingStart.current === 'raspberry' || (autoStart && !autoStartHandled.current);
+        : pendingStart.current === 'raspberry' || (shouldAutoStart && !autoStartHandled.current);
       if (shouldStart) startLive();
     });
     return () => { active = false; };
-  }, [camera, autoStart, startLive]);
+  }, [camera, shouldAutoStart, startLive]);
 
   return {
     ...detection, video, camera, cameraPending, remoteCamera,
@@ -73,7 +78,10 @@ export function useCameraRecognition(selectExpression, autoStart = false) {
       if (camera || pendingStart.current === 'raspberry') pendingStart.current = null;
       start(video.current, false);
     },
-    startLive,
+    startLive: () => {
+      setAutoDisplayEnabled(true);
+      startLive();
+    },
     stopLive,
   };
 }

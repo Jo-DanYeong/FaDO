@@ -3,6 +3,7 @@ package backend.server.RaspberryPi.API;
 import backend.server.RaspberryPi.DTO.SelectExpressionRequest;
 import backend.server.RaspberryPi.RaspberryClient;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,12 @@ public class DeviceController {
         client.sendExpression(request);
 
         return ResponseEntity.ok("성공");
+    }
+
+    @PostMapping("/expression/hold/{holdToken}")
+    public ResponseEntity<Void> renewExpressionHold(@PathVariable("holdToken") String holdToken) {
+        client.renewExpressionHold(holdToken);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/expression/image")

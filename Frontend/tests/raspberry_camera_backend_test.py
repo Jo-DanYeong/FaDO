@@ -28,7 +28,7 @@ with patch.dict(sys.modules, {
     "RPiServer.Cam_test_Rpi": pipeline,
     "RaspberryPi": oled,
 }):
-    from RPiServer import camera_stream as module, expression_display
+    from RPiServer import camera_stream as module, expression_display, main
 
 Service = module.CameraStreamService
 
@@ -98,6 +98,42 @@ class CameraDetectionTests(unittest.TestCase):
 class LocalDisplayTests(unittest.TestCase):
     def setUp(self):
         self.path = ROOT.parent / "RPiServer" / "expressions"
+
+    def test_manual_hold_renews_without_redrawing_and_expires_if_web_disconnects(self):
+        shown = []
+        display = expression_display.LocalExpressionDisplay(self.path, lambda path: shown.append(path.stem))
+        now = 100.0
+        with patch.object(expression_display, "time", types.SimpleNamespace(monotonic=lambda: now)):
+            display.show_from_web(self.path / "love.png", "first-selection")
+            for _ in range(3):
+                now += 4.0
+                self.assertTrue(display.renew_hold("first-selection"))
+                display.observe([])
+            self.assertEqual(shown, ["love"])
+
+            display.show_from_web(self.path / "love.png", "second-selection")
+            self.assertFalse(display.renew_hold("first-selection"))
+            self.assertTrue(display.renew_hold("second-selection"))
+            now += expression_display.WEB_HOLD_SECONDS
+            self.assertFalse(display.renew_hold("second-selection"))
+            display.observe([])
+            self.assertEqual(shown, ["love", "love", "neutral"])
+
+    def test_automatic_display_replaces_a_previous_manual_hold(self):
+        display = expression_display.LocalExpressionDisplay(self.path, lambda _: None)
+        display.show_from_web(self.path / "happy.png", "manual-selection")
+        display.show_from_web(self.path / "neutral.png")
+        self.assertFalse(display.renew_hold("manual-selection"))
+
+    def test_hold_endpoint_rejects_a_previous_manual_selection(self):
+        display = expression_display.LocalExpressionDisplay(self.path, lambda _: None)
+        with patch.object(main, "local_display", display), patch.object(main, "EXPRESSION_DIR", self.path):
+            main.expression(main.ExpressionRequest(expressionId="happy", holdToken="manual-selection"))
+            self.assertEqual(main.renew_expression_hold("manual-selection").status_code, 204)
+            main.expression(main.ExpressionRequest(expressionId="happy"))
+            with self.assertRaises(HTTPException) as caught:
+                main.renew_expression_hold("manual-selection")
+        self.assertEqual(caught.exception.status_code, 409)
 
     def test_service_starts_local_inference_without_a_web_request_and_releases_the_camera(self):
         service = Service()

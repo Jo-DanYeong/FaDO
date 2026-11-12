@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from RPiServer.camera_stream import camera_service, router as camera_router
 from RPiServer.expression_display import LocalExpressionDisplay
 from RPiServer.yolo_api import router as yolo_router
@@ -33,6 +33,7 @@ app.include_router(camera_router)
 
 class ExpressionRequest(BaseModel):
     expressionId: str
+    holdToken: str | None = Field(default=None, max_length=100, pattern=r"^[a-zA-Z0-9-]+$")
 
 
 @app.get("/health")
@@ -82,10 +83,17 @@ def upload_expression_image(
 def expression(request: ExpressionRequest):
     target = expression_path(request.expressionId)
     try:
-        local_display.show_from_web(target)
+        local_display.show_from_web(target, request.holdToken)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="저장된 표정 PNG가 없습니다") from error
     return {"expressionId": request.expressionId, "displayed": True}
+
+
+@app.post("/expression/hold/{hold_token}", status_code=204)
+def renew_expression_hold(hold_token: str):
+    if not local_display.renew_hold(hold_token):
+        raise HTTPException(status_code=409, detail="유지 중인 표정이 변경되었거나 유지 시간이 끝났습니다")
+    return Response(status_code=204)
 
 
 @app.delete("/expression/image", status_code=204)

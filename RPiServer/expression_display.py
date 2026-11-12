@@ -16,12 +16,16 @@ class LocalExpressionDisplay:
         self._directory = directory
         self._show_image = show_image
         self._resume_at = 0.0
+        self._hold_token = None
         self._retry_at = 0.0
         self._candidate = None
         self._last_displayed = None
 
     def _defer(self):
-        self._resume_at = time.monotonic() + WEB_HOLD_SECONDS
+        now = time.monotonic()
+        if now >= self._resume_at:
+            self._hold_token = None
+        self._resume_at = now + WEB_HOLD_SECONDS
         self._candidate = None
         self._last_displayed = None
 
@@ -33,12 +37,21 @@ class LocalExpressionDisplay:
         with self.lock:
             return time.monotonic() >= self._resume_at
 
-    def show_from_web(self, path: Path):
+    def show_from_web(self, path: Path, hold_token: str | None = None):
         with self.lock:
             if not path.is_file():
                 raise FileNotFoundError(path)
             self._show_image(path)
             self._defer()
+            self._hold_token = hold_token
+
+    def renew_hold(self, hold_token: str) -> bool:
+        with self.lock:
+            now = time.monotonic()
+            if hold_token != self._hold_token or now >= self._resume_at:
+                return False
+            self._resume_at = now + WEB_HOLD_SECONDS
+            return True
 
     def observe(self, predictions):
         with self.lock:

@@ -14,6 +14,8 @@ function initialize() {
 export function WorkspaceProvider({ children, initialState }) {
   const [state, dispatch] = useReducer(workspaceReducer, initialState, value => value || initialize());
   const [cameraCredentials, setCameraCredentials] = useState(null);
+  const [autoDisplayEnabled, setAutoDisplayEnabled] = useState(true);
+  const [manualDisplayHold, setManualDisplayHold] = useState(null);
   const notify = useToast();
   const { settings, custom, builtins, persistedSelected } = state;
 
@@ -23,7 +25,10 @@ export function WorkspaceProvider({ children, initialState }) {
     }
   }, [settings, custom, builtins, persistedSelected, notify]);
 
-  const value = useMemo(() => ({ state, dispatch, cameraCredentials, setCameraCredentials }), [state, cameraCredentials]);
+  const value = useMemo(() => ({
+    state, dispatch, cameraCredentials, setCameraCredentials, autoDisplayEnabled, setAutoDisplayEnabled,
+    manualDisplayHold, setManualDisplayHold,
+  }), [state, cameraCredentials, autoDisplayEnabled, manualDisplayHold]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
