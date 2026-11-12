@@ -9,11 +9,11 @@ from pydantic import BaseModel
 from RPiServer.camera_stream import camera_service, router as camera_router
 from RPiServer.expression_display import LocalExpressionDisplay
 from RPiServer.yolo_api import router as yolo_router
-from RaspberryPi import ImgTest
+from RaspberryPi import ImgShow
 
 EXPRESSION_DIR = Path(__file__).resolve().parent / "expressions"
 MAX_PNG_BYTES = 1024 * 1024
-local_display = LocalExpressionDisplay(EXPRESSION_DIR, ImgTest.show_image)
+local_display = LocalExpressionDisplay(EXPRESSION_DIR, ImgShow.show_image)
 
 
 @asynccontextmanager

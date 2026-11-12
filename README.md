@@ -154,7 +154,7 @@ FaDO/
 │   ├── expressions/            # Pi 측 표정 PNG
 │   └── YoloTrain/              # 학습 데이터 및 실행 기록
 ├── RaspberryPi/
-│   ├── ImgTest.py               # OLED 정적 이미지 출력
+│   ├── ImgShow.py               # OLED 정적 이미지 출력
 │   ├── GifTest.py
 │   ├── Emotion.py
 │   └── main.py
@@ -565,7 +565,7 @@ USB 카메라:
 python RPiServer/Cam_test_Rpi.py --camera usb --headless
 ```
 
-OLED 정적 이미지 동작은 `RaspberryPi/ImgTest.py`와 실제 배선을 점검하세요.
+OLED 정적 이미지 동작은 `RaspberryPi/ImgShow.py`와 실제 배선을 점검하세요.
 
 ### 12.2. 서비스 로그
 
