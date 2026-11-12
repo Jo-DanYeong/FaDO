@@ -3,7 +3,7 @@ from io import BytesIO
 from pathlib import Path
 from threading import Lock
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
 from ultralytics import YOLO
 
@@ -51,7 +51,7 @@ def model_info():
 
 
 @router.post("/predict")
-def predict(file: UploadFile = File(...)):
+def predict(request: Request, file: UploadFile = File(...)):
     if file.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(415, "JPEG/PNG required")
     data = file.file.read(MAX_SIZE + 1)
@@ -70,6 +70,7 @@ def predict(file: UploadFile = File(...)):
 
     detections = []
     try:
+        request.app.state.local_display.defer_to_web()
         # Keep loading and inference serialized for a single Raspberry Pi worker.
         with model_lock:
             load_models()

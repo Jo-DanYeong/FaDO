@@ -21,6 +21,7 @@ from RPiServer.Cam_test_Rpi import (
     open_camera,
     predict_expressions,
 )
+from RPiServer.expression_display import LocalExpressionDisplay
 
 logger = logging.getLogger("fado.camera")
 router = APIRouter(tags=["Camera"])
@@ -61,6 +62,7 @@ class CameraStreamService:
     def __init__(self) -> None:
         self._condition = threading.Condition()
         self._worker: threading.Thread | None = None
+        self._local_display: LocalExpressionDisplay | None = None
         self._stop = threading.Event()
         self._jpeg: bytes | None = None
         self._sequence = 0
@@ -74,17 +76,40 @@ class CameraStreamService:
         with self._condition:
             self._clients += 1
             self._last_without_clients = time.monotonic()
-            if self._worker is None or not self._worker.is_alive():
-                self._stop.clear()
-                self._jpeg = None
-                self._sequence = 0
+            self._start_worker()
+
+    def start_local(self, display: LocalExpressionDisplay) -> None:
+        with self._condition:
+            self._local_display = display
+            self._start_worker()
+
+    def _start_worker(self) -> None:
+        if self._worker is not None and self._worker.is_alive():
+            return
+        self._stop.clear()
+        self._jpeg = None
+        self._sequence = 0
+        self._error = None
+        self._worker = threading.Thread(target=self._run, name="fado-camera-worker", daemon=True)
+        self._worker.start()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            with self._condition:
                 self._error = None
-                self._worker = threading.Thread(
-                    target=self._capture_loop,
-                    name="fado-camera-worker",
-                    daemon=True,
-                )
-                self._worker.start()
+            self._capture_loop()
+            if self._local_display is None or self._stop.wait(5.0):
+                break
+
+    def stop(self) -> None:
+        with self._condition:
+            self._stop.set()
+            self._condition.notify_all()
+            worker = self._worker
+        if worker is not None:
+            worker.join(timeout=10.0)
+            if worker.is_alive():
+                logger.warning("Camera worker did not stop within 10 seconds")
 
     def unsubscribe(self) -> None:
         with self._condition:
@@ -95,9 +120,11 @@ class CameraStreamService:
     def wait_for_frame(self, last_sequence: int, timeout: float = 5.0):
         with self._condition:
             self._condition.wait_for(
-                lambda: self._sequence > last_sequence or self._error is not None,
+                lambda: self._sequence > last_sequence or self._error is not None or self._stop.is_set(),
                 timeout=timeout,
             )
+            if self._stop.is_set():
+                return last_sequence, None, "Camera service is stopping"
             return self._sequence, self._jpeg, self._error
 
     def status(self) -> dict:
@@ -118,12 +145,14 @@ class CameraStreamService:
             with self._condition:
                 previous = self._prediction_sequence
                 ready = self._condition.wait_for(
-                    lambda: self._prediction_sequence > previous or self._error is not None,
+                    lambda: self._prediction_sequence > previous or self._error is not None or self._stop.is_set(),
                     timeout=timeout,
                 )
                 if self._error is not None:
                     logger.warning("Camera inference failed: %s", self._error)
                     raise HTTPException(503, "Camera or expression model is unavailable; check Pi logs")
+                if self._stop.is_set():
+                    raise HTTPException(503, "Camera service is stopping")
                 if not ready:
                     raise HTTPException(504, "Camera inference timed out; model may still be loading")
                 return {
@@ -145,7 +174,10 @@ class CameraStreamService:
 
     def _capture_loop(self) -> None:
         close_camera = None
+        local_display = self._local_display
         try:
+            if local_display is not None:
+                local_display.observe([])
             if not FACE_MODEL_PATH.is_dir() or not EXPRESSION_MODEL_PATH.is_dir():
                 raise FileNotFoundError(
                     f"NCNN model folders missing: {FACE_MODEL_PATH}, {EXPRESSION_MODEL_PATH}"
@@ -164,11 +196,10 @@ class CameraStreamService:
             while not self._stop.is_set():
                 with self._condition:
                     idle = self._clients == 0
-                    if idle and time.monotonic() - self._last_without_clients >= IDLE_STOP_SECONDS:
+                    if idle and local_display is None and time.monotonic() - self._last_without_clients >= IDLE_STOP_SECONDS:
                         break
-                if idle:
-                    # Do not run expensive inference while nobody is watching.
-                    time.sleep(0.2)
+                if idle and (local_display is None or not local_display.can_update()):
+                    self._stop.wait(0.2)
                     continue
 
                 ok, frame = read_frame()
@@ -180,21 +211,26 @@ class CameraStreamService:
                 if frame_count % 3 == 0:
                     predictions = predict_expressions(frame, face_model, expression_model)
                     self._publish_predictions(predictions)
+                    if local_display is not None:
+                        local_display.observe(predictions)
                 frame_count += 1
 
-                draw_predictions(frame, predictions)
-                encoded, buffer = cv2.imencode(
-                    ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
-                )
-                if encoded:
-                    with self._condition:
-                        self._jpeg = buffer.tobytes()
-                        self._sequence += 1
-                        self._condition.notify_all()
-                time.sleep(0.05)
+                if not idle:
+                    draw_predictions(frame, predictions)
+                    encoded, buffer = cv2.imencode(
+                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
+                    )
+                    if encoded:
+                        with self._condition:
+                            self._jpeg = buffer.tobytes()
+                            self._sequence += 1
+                            self._condition.notify_all()
+                self._stop.wait(0.05)
 
         except Exception as exc:
             logger.exception("FaDO camera worker stopped with an error")
+            if local_display is not None:
+                local_display.observe([])
             with self._condition:
                 self._error = f"{type(exc).__name__}: {exc}"
                 self._condition.notify_all()
@@ -220,7 +256,7 @@ p{color:#aeb9c5;line-height:1.6}a{color:#92c5ff}
 <h1>FaDO | 얼굴 탐지 및 표정 분류</h1>
 <img src="/camera/stream" alt="카메라 연결 또는 NCNN 모델 로딩 중">
 <p>모델 로딩 중에는 영상이 바로 표시되지 않을 수 있습니다. 화면이 계속 비어 있다면 <a href="/camera/status">카메라 상태</a>를 확인하세요.</p>
-<p>이 화면은 승인된 사용자만 이용하세요. 창을 닫으면 연결이 종료되고, 다른 사용자가 없으면 카메라도 자동으로 종료됩니다.</p>
+<p>이 화면을 닫아도 라파는 자체 카메라로 표정을 인식해 OLED에 표시합니다.</p>
 </main></body></html>"""
 
 
@@ -235,7 +271,8 @@ def camera_status(_: Annotated[None, Depends(require_camera_auth)]):
 
 
 @router.post("/camera/detect")
-def camera_detect(_: Annotated[None, Depends(require_camera_auth)]):
+def camera_detect(request: Request, _: Annotated[None, Depends(require_camera_auth)]):
+    request.app.state.local_display.defer_to_web()
     return camera_service.detect_once()
 
 

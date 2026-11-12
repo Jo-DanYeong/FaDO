@@ -1,21 +1,34 @@
+import asyncio
 import re
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
-from threading import Lock
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
-from RPiServer.camera_stream import router as camera_router
+from RPiServer.camera_stream import camera_service, router as camera_router
+from RPiServer.expression_display import LocalExpressionDisplay
 from RPiServer.yolo_api import router as yolo_router
 from RaspberryPi import ImgTest
 
-app = FastAPI()
+EXPRESSION_DIR = Path(__file__).resolve().parent / "expressions"
+MAX_PNG_BYTES = 1024 * 1024
+local_display = LocalExpressionDisplay(EXPRESSION_DIR, ImgTest.show_image)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    camera_service.start_local(local_display)
+    try:
+        yield
+    finally:
+        await asyncio.to_thread(camera_service.stop)
+
+
+app = FastAPI(lifespan=lifespan)
+app.state.local_display = local_display
 app.include_router(yolo_router)
 app.include_router(camera_router)
-
-EXPRESSION_DIR = Path(__file__).resolve().parent / "expressions"
-expression_lock = Lock()
-MAX_PNG_BYTES = 1024 * 1024
 
 
 class ExpressionRequest(BaseModel):
@@ -58,7 +71,7 @@ def upload_expression_image(
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as error:
         raise HTTPException(status_code=400, detail="올바르지 않은 PNG") from error
 
-    with expression_lock:
+    with local_display.lock:
         EXPRESSION_DIR.mkdir(parents=True, exist_ok=True)
         target.write_bytes(png_bytes)
 
@@ -68,17 +81,17 @@ def upload_expression_image(
 @app.post("/expression")
 def expression(request: ExpressionRequest):
     target = expression_path(request.expressionId)
-    with expression_lock:
-        if not target.is_file():
-            raise HTTPException(status_code=404, detail="저장된 표정 PNG가 없습니다")
-        ImgTest.show_image(target)
+    try:
+        local_display.show_from_web(target)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="저장된 표정 PNG가 없습니다") from error
     return {"expressionId": request.expressionId, "displayed": True}
 
 
 @app.delete("/expression/image", status_code=204)
 def delete_expression_image(expressionId: str):
     target = expression_path(expressionId)
-    with expression_lock:
+    with local_display.lock:
         if target.is_dir():
             raise HTTPException(status_code=409, detail="PNG 경로에 폴더가 있습니다")
         target.unlink(missing_ok=True)
