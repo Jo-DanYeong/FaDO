@@ -21,7 +21,7 @@ pipeline.draw_predictions = lambda *args: None
 pipeline.open_camera = lambda *args: (_ for _ in ()).throw(AssertionError("Do not open camera"))
 pipeline.predict_expressions = lambda *args: []
 oled = types.ModuleType("RaspberryPi")
-oled.ImgTest = types.SimpleNamespace(show_image=lambda _: None)
+oled.ImgShow = types.SimpleNamespace(show_image=lambda _: None)
 with patch.dict(sys.modules, {
     "cv2": types.ModuleType("cv2"),
     "ultralytics": types.SimpleNamespace(YOLO=None),
