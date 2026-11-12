@@ -1,3 +1,5 @@
+import { neutralExpressionId } from '../core/expressionRecognition.js';
+
 export const STORAGE_KEY = 'fado.workspace.v1';
 export const defaultSettings = {
   deviceName: '나의 FaDO',
@@ -28,7 +30,7 @@ export function readWorkspace(storage = localStorage) {
     settings.confidence = typeof settings.confidence === 'boolean' ? settings.confidence : true;
     return {
       settings,
-      selected: typeof data.selected === 'string' ? data.selected : 'happy',
+      selected: typeof data.selected === 'string' ? data.selected : neutralExpressionId,
       custom: Array.isArray(data.custom) ? data.custom.filter(item => hasExpressionData(item) && item.id.startsWith('custom-')).map(item => ({
         id: item.id,
         name: item.name.slice(0, 20),
@@ -43,7 +45,7 @@ export function readWorkspace(storage = localStorage) {
       })) : [],
     };
   } catch {
-    return { settings: { ...defaultSettings }, custom: [], presetEdits: [], selected: 'happy' };
+    return { settings: { ...defaultSettings }, custom: [], presetEdits: [], selected: neutralExpressionId };
   }
 }
 

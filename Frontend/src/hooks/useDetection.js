@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '../context/ToastContext.jsx';
-import { captureCameraFrame, detectCameraFrame, detectRaspberryCamera } from '../services/detection.js';
-import { createExpressionTracker, recognitionPolicy } from '../core/expressionRecognition.js';
+import { captureCameraFrame, detectCameraFrame, detectRaspberryCamera, isCameraFrameReady } from '../services/detection.js';
+import { createExpressionTracker, neutralExpressionId, recognitionPolicy } from '../core/expressionRecognition.js';
 
 const messages = {
-  'no-face': '얼굴을 찾지 못했어요. 마지막 표정을 유지해요.',
+  'no-face': '얼굴을 찾지 못했어요. 평온 표정을 표시해요.',
   'invalid-box': '얼굴 위치를 확인할 수 없어요. 인식 서버 응답을 확인해주세요.',
   unsupported: '지원하지 않는 표정이에요. 라파의 얼굴·표정 모델을 확인해주세요.',
-  'low-confidence': `신뢰도가 ${recognitionPolicy.minConfidence * 100}%보다 낮아요. 마지막 표정을 유지해요.`,
+  'low-confidence': `표정이 잘 인식되지 않았어요.`,
   confirming: '같은 표정이 이어지는지 확인하고 있어요.',
   stable: '표정이 유지되고 있어요.',
 };
 
-export function useDetection(camera, selectExpression, source = 'local') {
+export function useDetection(camera, selectExpression, source = 'raspberry') {
   const [detections, setDetections] = useState(null);
   const [pending, setPending] = useState(false);
   const [live, setLive] = useState(false);
@@ -44,16 +44,13 @@ export function useDetection(camera, selectExpression, source = 'local') {
     setLiveMessage('');
     setLastSentId(null);
     window.addEventListener('pagehide', stopLive);
-    const tracks = source === 'local' ? camera?.getTracks() || [] : [];
-    tracks.forEach(track => track.addEventListener?.('ended', stopLive));
     return () => {
       window.removeEventListener('pagehide', stopLive);
-      tracks.forEach(track => track.removeEventListener?.('ended', stopLive));
       cancel();
     };
   }, [camera, source, cancel, stopLive]);
 
-  function start(video, continuous) {
+  const start = useCallback((video, continuous) => {
     if ((source === 'local' && !camera) || current.current) return;
     const run = { controller: new AbortController(), timer: null };
     const tracker = createExpressionTracker();
@@ -67,10 +64,30 @@ export function useDetection(camera, selectExpression, source = 'local') {
     }
     const isCurrent = () => current.current === run && !run.controller.signal.aborted;
 
+    async function display(id) {
+      if (id === sentId) return true;
+      const success = await selectExpression(id, { signal: run.controller.signal, source: 'camera' });
+      if (!isCurrent()) return false;
+      if (!success) {
+        stopLive();
+        setLiveMessage('OLED 전송에 실패해 자동 표시를 중지했어요. 연결을 확인하고 다시 시작해주세요.');
+        return false;
+      }
+      sentId = id;
+      setLastSentId(id);
+      return true;
+    }
+
     async function tick() {
       if (!isCurrent()) return;
       setPending(true);
       try {
+        if (continuous && source === 'local' && !isCameraFrameReady(video)) {
+          // Some browsers do not emit loadeddata. Check readiness again on the next tick.
+          setLiveMessage('노트북 카메라 영상을 기다리고 있어요.');
+          return;
+        }
+        if (continuous && sentId === null && !await display(neutralExpressionId)) return;
         let result;
         if (source === 'raspberry') {
           result = await detectRaspberryCamera({ signal: run.controller.signal });
@@ -84,17 +101,9 @@ export function useDetection(camera, selectExpression, source = 'local') {
         if (continuous) {
           const candidate = tracker.observe(result);
           setLiveMessage(messages[candidate.reason]);
-          if (candidate.reason === 'stable' && candidate.id !== sentId) {
-            setLiveMessage('표정 PNG를 저장하고 OLED 표시 명령을 보내고 있어요.');
-            const success = await selectExpression(candidate.id, { signal: run.controller.signal, source: 'camera' });
-            if (!isCurrent()) return;
-            if (!success) {
-              stopLive();
-              setLiveMessage('OLED 전송에 실패해 자동 표시를 중지했어요. 연결을 확인하고 다시 시작해주세요.');
-              return;
-            }
-            sentId = candidate.id;
-            setLastSentId(sentId);
+          const id = candidate.reason === 'stable' ? candidate.id
+            : candidate.reason === 'confirming' ? sentId : neutralExpressionId;
+          if (id !== sentId && await display(id) && candidate.reason === 'stable') {
             setLiveMessage('OLED 표시 명령을 전송했어요. 다음 표정을 인식하고 있어요.');
           }
         }
@@ -113,12 +122,11 @@ export function useDetection(camera, selectExpression, source = 'local') {
       }
     }
     tick();
-  }
+  }, [camera, source, selectExpression, stopLive, notify]);
 
   return {
     detections, detectionPending: pending, live, liveMessage, lastSentId,
-    detect: video => start(video, false),
-    startLive: video => start(video, true),
+    start,
     stopLive,
   };
 }

@@ -8,20 +8,24 @@ import { useWorkspace } from '../../context/WorkspaceContext.jsx';
 import { getExpressions, getSelectedExpression } from '../../core/workspace.js';
 import { useCameraRecognition } from '../../hooks/useCameraRecognition.js';
 
-export function StudioPage({ actions, editorOpen }) {
+export function StudioPage({ actions, editorOpen, connectionStatus }) {
   const { state, dispatch } = useWorkspace();
   const expression = getSelectedExpression(state);
   const count = getExpressions(state).length;
   const { select } = actions;
-  const recognition = useCameraRecognition(select);
+  const recognition = useCameraRecognition(select, connectionStatus === 'connected');
   const { live, stopLive } = recognition;
   const selectManually = useCallback(id => {
-    if (live) stopLive();
+    stopLive();
     return select(id);
-  }, [live, stopLive, select]);
+  }, [stopLive, select]);
   const create = () => {
-    if (live) stopLive();
+    stopLive();
     actions.create();
+  };
+  const edit = id => {
+    stopLive();
+    actions.edit(id);
   };
 
   useEffect(() => {
@@ -65,7 +69,7 @@ export function StudioPage({ actions, editorOpen }) {
       </div>
       <section className="quick-library" aria-labelledby="quick-title">
         <div className="section-heading"><div><h2 id="quick-title">어떤 마음을 전해볼까요? <span className="count-badge">{count}</span></h2><p>직접 고르면 자동 인식을 중지하고 선택한 표정을 OLED로 보내요.</p></div><a className="text-link" href="#library">전체 라이브러리 <Icon name="arrow" /></a></div>
-        <div className="expression-grid quick-grid">{state.builtins.map(item => <ExpressionCard key={item.id} expression={item} selected={state.selected} actions={{ ...actions, select: selectManually }} quick />)}</div>
+        <div className="expression-grid quick-grid">{state.builtins.map(item => <ExpressionCard key={item.id} expression={item} selected={state.selected} actions={{ ...actions, select: selectManually, edit }} quick />)}</div>
       </section>
       <div className="bottom-note"><span className="note-icon"><Icon name="pencil" /></span><div><strong>세상에 하나뿐인, 나만의 표정</strong><p>픽셀을 그려 FaDO에게 새로운 표정을 선물해보세요.</p></div><button className="text-link" onClick={create}>직접 그려보기 <Icon name="arrow" /></button><span className="note-decoration">✳</span></div>
     </>

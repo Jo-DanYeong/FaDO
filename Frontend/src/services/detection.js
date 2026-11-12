@@ -1,6 +1,10 @@
+export function isCameraFrameReady(video) {
+  return Boolean(video && video.readyState >= 2 && video.videoWidth && video.videoHeight);
+}
+
 export function captureCameraFrame(video) {
   return new Promise((resolve, reject) => {
-    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    if (!isCameraFrameReady(video)) {
       reject(new Error('카메라 영상이 준비되지 않았어요. 영상이 보이면 다시 눌러주세요.'));
       return;
     }

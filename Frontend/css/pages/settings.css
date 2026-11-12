@@ -35,8 +35,6 @@
 .camera-view video { width: 100%; height: 100%; object-fit: cover; }
 .raspberry-camera-preview .camera-view img { width: 100%; height: 100%; object-fit: contain; }
 .raspberry-preview-controls { margin: 12px 22px 0; }
-.raspberry-preview-form { display: grid; gap: 10px; }
-.raspberry-preview-form .field { margin: 0; gap: 5px; }
 .raspberry-preview-error { margin-top: 8px; color: #934c40; font-size: 11px; line-height: 1.6; }
 .camera-view .mirrored { transform: scaleX(-1); }
 .camera-footer { padding: 17px 22px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }

@@ -26,7 +26,7 @@ test('saved data remains compatible and transient UI state is not persisted', ()
 });
 
 test('corrupt storage, malformed bitmaps and invalid settings recover safely', () => {
-  assert.equal(readWorkspace(memoryStorage('{')).selected, 'happy');
+  assert.equal(readWorkspace(memoryStorage('{')).selected, 'neutral');
   const saved = readWorkspace(memoryStorage(JSON.stringify({
     settings: { brightness: 300, mirror: 'false', confidence: null },
     custom: [null, { ...custom, bitmap: [1] }, { ...custom, bitmap: Array(8192).fill(2) }, custom],
@@ -91,7 +91,7 @@ test('storage quota errors are reported without throwing', () => {
 
 test('camera recognition updates the preview without persisting camera results over the manual selection', () => {
   const neutral = { ...builtin, id: 'neutral' };
-  const initial = createInitialWorkspace(readWorkspace(memoryStorage(null)), [builtin, neutral]);
+  const initial = createInitialWorkspace(readWorkspace(memoryStorage('{"selected":"happy"}')), [builtin, neutral]);
   const state = workspaceReducer(initial, { type: 'recognize-expression', id: 'neutral' });
   assert.equal(state.selected, 'neutral');
   assert.equal(state.persistedSelected, 'happy');

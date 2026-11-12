@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useState } from 'react';
 import { createInitialWorkspace, workspaceReducer } from '../core/workspace.js';
 import { readWorkspace, saveWorkspace } from '../services/storage.js';
 import { presets } from '../data/presets.js';
@@ -13,6 +13,7 @@ function initialize() {
 
 export function WorkspaceProvider({ children, initialState }) {
   const [state, dispatch] = useReducer(workspaceReducer, initialState, value => value || initialize());
+  const [cameraCredentials, setCameraCredentials] = useState(null);
   const notify = useToast();
   const { settings, custom, builtins, persistedSelected } = state;
 
@@ -22,7 +23,7 @@ export function WorkspaceProvider({ children, initialState }) {
     }
   }, [settings, custom, builtins, persistedSelected, notify]);
 
-  const value = useMemo(() => ({ state, dispatch }), [state]);
+  const value = useMemo(() => ({ state, dispatch, cameraCredentials, setCameraCredentials }), [state, cameraCredentials]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 

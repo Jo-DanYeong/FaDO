@@ -1,5 +1,6 @@
-export const recognitionPolicy = Object.freeze({ minConfidence: 0.55, confirmations: 2, intervalMs: 750 });
-const expressionIds = new Set(['angry', 'happy', 'neutral', 'sad', 'surprised']);
+export const recognitionPolicy = Object.freeze({ minConfidence: 0.45, confirmations: 2, intervalMs: 750 });
+export const neutralExpressionId = 'neutral';
+const expressionIds = new Set(['angry', 'happy', neutralExpressionId, 'sad', 'surprised']);
 
 function area(box) {
   if (!Array.isArray(box) || box.length !== 4 || !box.every(Number.isFinite)) return 0;

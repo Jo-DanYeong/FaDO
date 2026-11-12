@@ -12,7 +12,7 @@ function SettingSwitch({ label, description, enabled, onChange }) {
 }
 
 export function SettingsPage({ actions, connectionStatus }) {
-  const { state, dispatch } = useWorkspace();
+  const { state, dispatch, cameraCredentials, setCameraCredentials } = useWorkspace();
   const settings = state.settings;
   const [draft, setDraft] = useState(() => ({ deviceName: settings.deviceName, host: settings.host }));
   const notify = useToast();
@@ -28,6 +28,23 @@ export function SettingsPage({ actions, connectionStatus }) {
     setDraft({ deviceName, host });
     updateSettings({ deviceName, host });
     notify('연결 정보를 이 브라우저에 저장했어요.');
+  }
+
+  function saveCameraCredentials(event) {
+    event.preventDefault();
+    const fields = event.currentTarget.elements;
+    const usernameInput = fields.namedItem('cameraUsername');
+    const username = usernameInput.value.trim();
+    const passwordInput = fields.namedItem('cameraPassword');
+    const password = passwordInput.value;
+    if (!username || username.includes(':') || !password) {
+      notify('콜론(:)을 제외한 카메라 아이디와 비밀번호를 입력해주세요.');
+      return;
+    }
+    setCameraCredentials({ username, password });
+    usernameInput.value = username;
+    passwordInput.value = '';
+    notify('이 탭에서 라파 카메라 인증 정보를 사용할 수 있어요.');
   }
 
   return (
@@ -53,6 +70,15 @@ export function SettingsPage({ actions, connectionStatus }) {
               <SettingSwitch label="카메라 좌우 반전" description="거울을 보는 것처럼 자연스럽게." enabled={settings.mirror} onChange={() => updateSettings({ mirror: !settings.mirror })} />
               <SettingSwitch label="인식 신뢰도 표시" description="카메라로 인식한 표정의 신뢰도를 표시해요." enabled={settings.confidence} onChange={() => updateSettings({ confidence: !settings.confidence })} />
             </div>
+          </section>
+          <section className="card settings-card" aria-labelledby="camera-credentials-title">
+            <div className="card-header"><h2 id="camera-credentials-title"><Icon name="camera" />라파 카메라 인증</h2></div>
+            <form id="camera-credentials-form" className="settings-body" onSubmit={saveCameraCredentials}>
+              <label className="field">카메라 아이디<input name="cameraUsername" defaultValue={cameraCredentials?.username ?? ''} autoComplete="off" required maxLength={128} /></label>
+              <label className="field">카메라 비밀번호<input name="cameraPassword" type="password" autoComplete="off" required maxLength={256} /></label>
+              <p className="field-hint">{cameraCredentials ? '인증 정보가 설정됐어요. ' : ''}새로고침하거나 탭을 닫으면 인증 정보가 지워져요.</p>
+              <button type="submit" className="button button-primary"><Icon name="check" />카메라 인증 정보 저장</button>
+            </form>
           </section>
           <CameraRecognitionPanel recognition={recognition} />
         </div>
